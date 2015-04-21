@@ -45,7 +45,10 @@
 		content: none; }
 	table {
 		border-collapse: collapse;
-		border-spacing: 0; }
+		border-spacing: 0;
+		margin-left: auto;
+		margin-right: auto;
+	  font-size: 120%; }
 
 
 /* #Basic Styles
@@ -58,6 +61,7 @@
 		-webkit-text-size-adjust: 100%;
  }
 
+.align-justify { display: block ; text-align: justify ; }
 
 /* #Typography
 ================================================== */
@@ -89,6 +93,11 @@
 
 	hr { border: solid #ddd; border-width: 1px 0 0; clear: both; margin: 10px 0 30px; height: 0; }
 
+i.fa-slack {
+    -ms-transform: rotate(19deg);
+    -webkit-transform: rotate(19deg);
+    transform: rotate(19deg);
+}
 
 /* #Links
 ================================================== */
@@ -271,7 +280,7 @@
   color: #f8f8f2;
   table-layout: fixed;
   white-space: nowrap;
-  width:90%;
+  width:60%;
 }
 
 .highlighttable pre, .highlighttable code { display:block; margin:0; padding:0; background: none; overflow:auto; word-wrap: normal; }

@@ -9,7 +9,7 @@ markdown: kramdown
 highlighter: pygments
 
 ### content configuration ###
-title:       "CλaSH - Functional Hardware Description Language"
+title:       "CλaSH - From Haskell to Hardware"
 keywords:    "haskell, hardware, functional language, digital circuit, hdl, vhdl, verilog, systemverilog"
 description: "A landing page for information about the CλaSH HDL, a functional hardware description language"
 source_link: "https://github.com/clash-lang/clash-compiler"

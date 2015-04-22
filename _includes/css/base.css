@@ -280,7 +280,7 @@ i.fa-slack {
   color: #f8f8f2;
   table-layout: fixed;
   white-space: nowrap;
-  width:60%;
+  width:90%;
 }
 
 .highlighttable pre, .highlighttable code { display:block; margin:0; padding:0; background: none; overflow:auto; word-wrap: normal; }

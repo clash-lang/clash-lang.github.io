@@ -1,11 +1,9 @@
 ---
-title: "about"
+title: "publications"
 bg: gunmetal
 color: white
 fa-icon: bookmark-o
 ---
-
-## Publications
 
 * Harmsen, R. (2015) __[Specifying the WaveCore in CλaSH](http://essay.utwente.nl/66896/)__. Master's thesis, University of Twente, Enschede, The Netherlands, March 2015.
 * Baaij, C.P.R. (2015) __[Digital Circuits in CλaSH: Functional Specifications and Type-Directed Synthesis](http://doc.utwente.nl/93962/)__. PhD thesis, University of Twente, Enschede, The Netherlands, January 2015.

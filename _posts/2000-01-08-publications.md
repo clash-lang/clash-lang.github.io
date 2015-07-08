@@ -5,6 +5,7 @@ color: white
 fa-icon: bookmark-o
 ---
 
+* Wester, R. (2015) __[A transformation-based approach to hardware design using higher-order functions](http://doc.utwente.nl/96278/)__. PhD thesis, University of Twente, Enschede, The Netherlands, July 2015.
 * Harmsen, R. (2015) __[Specifying the WaveCore in CλaSH](http://essay.utwente.nl/66896/)__. Master's thesis, University of Twente, Enschede, The Netherlands, March 2015.
 * Baaij, C.P.R. (2015) __[Digital Circuits in CλaSH: Functional Specifications and Type-Directed Synthesis](http://doc.utwente.nl/93962/)__. PhD thesis, University of Twente, Enschede, The Netherlands, January 2015.
 * Wester, R. and Kuper, J. (2014) __[Design space exploration of a particle filter using higher-order functions](http://doc.utwente.nl/90642/)__. In: _Reconfigurable Computing: Architectures, Tools, and Applications_. Lecture Notes in Computer Science 8405. Springer Verlag, London, pp. 219-226. ISSN 0302-9743 ISBN 978-3-319-05959-4.

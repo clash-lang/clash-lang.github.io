@@ -16,7 +16,7 @@ fa-icon: book
 | | |
 | <i class="fa fa-globe text-white fa-lg"></i> | | [Blog post: Programming an FPGA with CλaSH](http://christiaanb.github.io/posts/clash-fpga-starter/) |
 
-Blog posts:
+####Blog posts:
 
 |-:|-|-|
 | <i class="fa fa-globe text-white fa-lg"></i> | | [6502 in Clash](http://polygonalhell.blogspot.com/2015/09/haskell-and-hardware.html) |

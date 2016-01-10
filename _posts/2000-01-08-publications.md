@@ -7,7 +7,7 @@ fa-icon: bookmark-o
 
 * Raa, I. te (2015) __[Recursive functional hardware descriptions using CλaSH](http://essay.utwente.nl/68804/)__. MSc thesis, University of Twente, Enschede, The Netherlands, November 2015.
 * Wester, R. (2015) __[A transformation-based approach to hardware design using higher-order functions](http://doc.utwente.nl/96278/)__. PhD thesis, University of Twente, Enschede, The Netherlands, July 2015.
-* Bakker, M. (2015) __[Numerical mathematics on FPGAs using CλaSH]__. BSc thesis, University of Twente, Enschede, The Netherlands, July 2015.
+* Bakker, M. (2015) __[Numerical mathematics on FPGAs using CλaSH](http://essay.utwente.nl/67605/)__. BSc thesis, University of Twente, Enschede, The Netherlands, July 2015.
 * Dam, M.R. (2015) __[Auditory processing using CλaSH](http://essay.utwente.nl/67613/)__. MSc thesis, University of Twente, Enschede, The Netherlands, May 2015.
 * Harmsen, R. (2015) __[Specifying the WaveCore in CλaSH](http://essay.utwente.nl/66896/)__. MSc thesis, University of Twente, Enschede, The Netherlands, March 2015.
 * Baaij, C.P.R. (2015) __[Digital Circuits in CλaSH: Functional Specifications and Type-Directed Synthesis](http://doc.utwente.nl/93962/)__. PhD thesis, University of Twente, Enschede, The Netherlands, January 2015.

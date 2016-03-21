@@ -23,4 +23,8 @@ fa-icon: book
 | <i class="fa fa-globe text-white fa-lg"></i> | | [6502 in Clash](http://polygonalhell.blogspot.com/2015/09/haskell-and-hardware.html) |
 | | |
 | <i class="fa fa-globe text-white fa-lg"></i> | | [An FPGA-based SKI calculus evaluator written in Haskell/Cλash](http://yager.io/HaSKI/HaSKI.html) |
+| | |
+| <i class="fa fa-globe text-white fa-lg"></i> | | [Functional hardware
+](http://rahne.si/programming/2016/02/28/funcional-hadware.html) |
+
 

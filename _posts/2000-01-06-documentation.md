@@ -4,7 +4,7 @@ bg: gunmetal
 color: white
 fa-icon: book
 ---
-##Tutorial and Reference material
+<h2>Tutorial and Reference material</h2>
 
 |-:|-|-|
 | <i class="fa fa-book text-white fa-lg"></i> | | [Tutorial](http://hackage.haskell.org/package/clash-prelude/docs/CLaSH-Tutorial.html) |
@@ -18,8 +18,7 @@ fa-icon: book
 | <i class="fa fa-globe text-white fa-lg"></i> | | [Blog post: Programming an FPGA with CλaSH](http://christiaanb.github.io/posts/clash-fpga-starter/) |
 
 <br>
-
-###Blog posts:
+<h3>Blog posts:</h3>
 
 |-:|-|-|
 | <i class="fa fa-globe text-white fa-lg"></i> | | [6502 in Clash](http://polygonalhell.blogspot.com/2015/09/haskell-and-hardware.html) |

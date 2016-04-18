@@ -26,5 +26,6 @@ fa-icon: book
 | <i class="fa fa-globe text-white fa-lg"></i> | | [An FPGA-based SKI calculus evaluator written in Haskell/Cλash](http://yager.io/HaSKI/HaSKI.html) |
 | | |
 | <i class="fa fa-globe text-white fa-lg"></i> | | [Functional hardware](http://rahne.si/programming/2016/02/28/funcional-hadware.html) |
-
+| | |
+| <i class="fa fa-globe text-white fa-lg"></i> | | [Remote fpga call](http://rahne.si/programming/clash/fpga/2016/02/28/remote-core-call.html) |
 

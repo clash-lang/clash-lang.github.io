@@ -16,6 +16,8 @@ fa-icon: book
 | <i class="fa fa-book text-white fa-lg"></i> | | [More examples](http://hackage.haskell.org/package/clash-prelude/docs/CLaSH-Examples.html) |
 | | |
 | <i class="fa fa-globe text-white fa-lg"></i> | | [Blog post: Programming an FPGA with CλaSH](http://christiaanb.github.io/posts/clash-fpga-starter/) |
+| | |
+| <i class="fa fa-globe text-white fa-lg"></i> | | [Blog post: Programming an FPGA with CλaSH - Xilinx version](http://catherineh.github.io/programming/2016/12/26/haskell-on-a-xilinx-fpga) |
 
 <br>
 <h3>Blog posts:</h3>

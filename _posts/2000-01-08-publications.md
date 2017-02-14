@@ -5,6 +5,7 @@ color: white
 fa-icon: bookmark-o
 ---
 
+* Appel, R.N. and Folmer, H.H. (2016) __[Analysis, optimization, and design of a SLAM solution for an implementation on reconfigurable hardware (FPGA) using CλaSH](http://essay.utwente.nl/71550/)__. MSc thesis, University of Twente, Enschede, The Netherlands, December 2016.
 * Vossen, J.J. (2016) __[Offloading Haskell functions onto an FPGA](http://essay.utwente.nl/71486/)__. MSc thesis, University of Twente, Enschede, The Netherlands, December 2016.
 * Verheij, J.G.J. (2016) __[Co-simulation between CλaSH and traditional HDLs](http://essay.utwente.nl/70777/)__. MSc thesis, University of Twente, Enschede, The Netherlands, August 2016.
 * Raa, I. te (2015) __[Recursive functional hardware descriptions using CλaSH](http://essay.utwente.nl/68804/)__. MSc thesis, University of Twente, Enschede, The Netherlands, November 2015.

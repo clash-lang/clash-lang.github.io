@@ -5,6 +5,8 @@ color: white
 fa-icon: bookmark-o
 ---
 
+* Vossen, J.J. (2016) __[Offloading Haskell functions onto an FPGA](http://essay.utwente.nl/71486/)__. MSc thesis, University of Twente, Enschede, The Netherlands, December 2016.
+* Verheij, J.G.J. (2016) __[Co-simulation between CλaSH and traditional HDLs](http://essay.utwente.nl/70777/)__. MSc thesis, University of Twente, Enschede, The Netherlands, August 2016.
 * Raa, I. te (2015) __[Recursive functional hardware descriptions using CλaSH](http://essay.utwente.nl/68804/)__. MSc thesis, University of Twente, Enschede, The Netherlands, November 2015.
 * Wester, R. (2015) __[A transformation-based approach to hardware design using higher-order functions](http://doc.utwente.nl/96278/)__. PhD thesis, University of Twente, Enschede, The Netherlands, July 2015.
 * Bakker, M. (2015) __[Numerical mathematics on FPGAs using CλaSH](http://essay.utwente.nl/67605/)__. BSc thesis, University of Twente, Enschede, The Netherlands, July 2015.

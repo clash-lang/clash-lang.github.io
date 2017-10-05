@@ -23,6 +23,8 @@ fa-icon: book
 <h3>Blog posts:</h3>
 
 |-:|-|-|
+| <i class="fa fa-globe text-white fa-lg"></i> | | [Building a CPU with Haskell](http://yager.io/CPU/CPU1.html) |
+| | |
 | <i class="fa fa-globe text-white fa-lg"></i> | | [6502 in Clash](http://polygonalhell.blogspot.com/2015/09/haskell-and-hardware.html) |
 | | |
 | <i class="fa fa-globe text-white fa-lg"></i> | | [An FPGA-based SKI calculus evaluator written in Haskell/Cλash](http://yager.io/HaSKI/HaSKI.html) |

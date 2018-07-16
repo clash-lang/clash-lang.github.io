@@ -1,0 +1,42 @@
+dist: trusty
+sudo: false
+language: generic
+
+env:
+  global:
+      - GIT_URL: https://github.com/clash-lang/clash-lang.github.io.git
+      - HUGO_CHECKSUM: 1c1d8942e12f36ef3f5ca4dd8a0a1bd9b5de87a6accc839dfbae705503e7693c
+      - HUGO_URL: https://github.com/gohugoio/hugo/releases/download/v0.44/hugo_0.44_Linux-64bit.tar.gz
+
+addons:
+    apt:
+        packages:
+            - python-pygments
+
+install:
+    # Install hugo:
+    - wget ${HUGO_URL} -O hugo.tar.gz
+    - echo ${HUGO_CHECKSUM} hugo.tar.gz > checksums.txt
+    - sha256sum -c checksums.txt --status
+    - tar xzf hugo.tar.gz
+
+script:
+    # Bash strict mode:
+    - set -e
+    - set -o pipefail
+
+    # Allow extended globs (see rm command)
+    - shopt -s extglob 
+
+    # Build website:
+    - ./hugo
+
+deploy:
+  local-dir: public
+  provider: pages
+  skip-cleanup: true
+  github-token: $GITHUB_TOKEN  
+  keep-history: false
+  target-branch: build
+  on:
+    branch: src

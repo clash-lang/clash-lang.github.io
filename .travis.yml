@@ -37,6 +37,6 @@ deploy:
   skip-cleanup: true
   github-token: $GITHUB_TOKEN  
   keep-history: false
-  target-branch: build
+  target-branch: gh-pages
   on:
     branch: src

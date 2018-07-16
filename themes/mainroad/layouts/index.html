@@ -1,0 +1,10 @@
+{{ partial "header.html" . }}
+{{ partial "no_sidebar.html" . }}
+
+	<main class="main list" role="main">
+		<div class="post__content clearfix">
+			{{ .Content }}
+		</div>
+	</main>
+
+{{ partial "footer.html" . }}

@@ -4,7 +4,16 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
-	<title>{{ .Title }}</title>
+    {{ if or (eq .Title "Blogs") (eq .Title "News") }}
+        <title>Clash: {{ string .CurrentSection.Type | title }}</title>
+    {{ else }}
+        {{ if .Title }}
+            <title>Clash: {{ .Title }}</title>
+        {{ else }}
+            <title</title>
+        {{ end }}
+    {{ end }}
+
 	<meta name="description" content="{{ if .IsHome }}{{ .Site.Params.description }}{{else}}{{ .Params.Description }}{{end}}">
 	{{ .Hugo.Generator }}
 	{{ if .Site.Params.opengraph }}{{ template "_internal/opengraph.html" . }}{{ end }}
@@ -16,21 +25,25 @@
 	{{- end }}
 	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
 	<link rel="stylesheet" href="{{ "css/style.css" | relURL }}">
+	<link rel="stylesheet" href="{{ "css/syntax.css" | relURL }}">
 	<script type="text/javascript" src="{{ "js/scripts.js" | relURL }}"></script>
-	<link rel="shortcut icon" href="{{ "favicon.ico" | relURL }}">
+	<link rel="shortcut icon" href="{{ "/media/logos/favicon.png" | relURL }}">
 	{{ template "_internal/google_analytics_async.html" . }}
 </head>
-<body class="body {{ if (.Site.Params.leftsidebar) or (.Params.leftsidebar) }}body-left-sidebar{{ else }}body-right-sidebar{{ end }}">
+<body class="body {{ if or (eq .Title "Blogs") (eq .Title "News") }}body-right-sidebar{{ else }}body-no-sidebar{{ end }}">
 	<div class="container container-outer">
 		<header class="header">
-			<div class="container container-inner">
-				<div class="logo" role="banner">
-					<a class="logo__link" href="{{ "" | relLangURL }}" title="{{ .Site.Title }}" rel="home">
-						<div class="logo__title">{{ .Site.Title }}</div>
-						{{ with .Site.Params.subtitle }}<div class="logo__tagline">{{ . }}</div>{{ end }}
-					</a>
-				</div>
-			</div>
 			{{ partial "menu.html" . }}
 		</header>
+        {{ if .CurrentSection }}
+        {{ if eq .CurrentSection.Kind "home" }}
+        <div class="clash-banner">
+            <div class="logo"></div>
+            <div class="logo__inner">
+                <div class="logo__title">Clash</div>
+                <div class="logo__tagline">A modern, functional, hardware description language</div>
+            </div>
+        </div>
+        {{ end }}
+        {{ end }}
 		<div class="wrapper clearfix">

@@ -1,0 +1,9 @@
+{
+    "name": "Martijn Bastiaan",
+    "bio": "Martijn Bastiaan has been a software engineer at <a href='http://qbaylogic.com/'>QBayLogic</a> since 2017. He is an active contributer to the Clash compiler itself.",
+    "image": "/media/authors/martijnbastiaan.png",
+    "weight": 1,
+    "social": {
+        "github": "https://www.github.com/martijnbastiaan"
+    }
+}

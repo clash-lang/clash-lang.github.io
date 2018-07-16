@@ -1,0 +1,80 @@
+baseurl = "https://clash-lang.org/"
+title = "Clash"
+languageCode = "en-us"
+paginate = "10" 
+theme = "mainroad"
+disqusShortname = "clash-lang" # Enable comments by entering your Disqus shortname
+googleAnalytics = "" # Enable Google Analytics by entering your tracking id
+
+pygmentsUseClassic=true
+pygmentsUseClasses=true
+pygmentsStyle = "tango"
+
+[Params]
+    subtitle = "From Haskell to hardware" 
+    description = ""
+    opengraph = true 
+    twitter_cards = false
+    readmore = true
+    leftsidebar = false 
+    authorbox = true 
+    post_navigation = true 
+
+    # change the format of dates
+    #dateformat = "2006-01-02" 
+
+[Params.widgets]
+    search = true # Enable "Search" widget
+    recent_articles = true # Enable "Recent articles" widget
+    recent_articles_num = 5 # Set the number of articles in the "Recent articles" widget
+
+    # TODO: lumps categories of news and blog together, no obvious way to fix this
+    categories = false # Enable "Categories" widget
+
+    # TODO: lumps tags of news and blog together, no obvious way to fix this
+    tags = false 
+    tags_counter = false 
+
+[menu]
+  [[menu.main]]
+    identifier = "downloads"
+    name = "Downloads"
+    pre = ""
+    url = "/downloads/"
+    weight = 60
+
+  [[menu.main]]
+    identifier = "documentation"
+    name = "Documentation"    
+    pre = ""
+    url = "/documentation/"
+    weight = 50
+
+  [[menu.main]]
+    identifier = "publications"
+    name = "Publications"    
+    pre = ""
+    url = "/publications/"
+    weight = 40
+
+
+  [[menu.main]]
+    identifier = "blog"
+    name = "Blog"
+    pre = ""
+    url = "/blog/"
+    weight = 30
+
+  [[menu.main]]
+    identifier = "news"
+    name = "News"
+    pre = ""
+    url = "/news/"
+    weight = 20
+
+  [[menu.main]]
+    identifier = "support"
+    name = "Support plan"
+    pre = ""
+    url = "/support/"
+    weight = 10

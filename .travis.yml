@@ -21,14 +21,6 @@ install:
     - tar xzf hugo.tar.gz
 
 script:
-    # Bash strict mode:
-    - set -e
-    - set -o pipefail
-
-    # Allow extended globs (see rm command)
-    - shopt -s extglob 
-
-    # Build website:
     - ./hugo
 
 deploy:

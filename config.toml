@@ -6,9 +6,11 @@ theme = "mainroad"
 disqusShortname = "clash-lang" # Enable comments by entering your Disqus shortname
 googleAnalytics = "" # Enable Google Analytics by entering your tracking id
 
-pygmentsUseClassic=true
-pygmentsUseClasses=true
+pygmentsUseClassic = true
+pygmentsUseClasses = true
 pygmentsStyle = "tango"
+
+
 
 [Params]
     subtitle = "From Haskell to hardware" 
@@ -19,6 +21,12 @@ pygmentsStyle = "tango"
     leftsidebar = false 
     authorbox = true 
     post_navigation = true 
+    
+    mathjax = true
+    mathjaxPath = "https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js"
+    mathjaxConfig = "TeX-MML-AM_HTMLorMML"
+    
+    #mathjaxConfig = "TeX-AMS-MML_HTMLorMML" # <- Default
 
     # change the format of dates
     #dateformat = "2006-01-02" 

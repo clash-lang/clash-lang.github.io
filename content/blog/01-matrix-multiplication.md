@@ -19,7 +19,7 @@ tags:
 
 *Matrix multiplications happen to be useful in a very broad range of computational applications, such as computer graphics, artificial intelligence, and climate change research. At QbayLogic we help implement these (and more) applications on FPGAs using Clash. In this blogpost we will explore the intricacies of implementing matrix multiplications on FPGAs. We will explore the apparent differences between hardware and software development, how to use Clash to convert a “naive” algorithm to one suitable for an FPGA, and the use of Clash dependent types.*
 
-*Our goal is to create a flexible yet efficient matrix multiplier. We want a pipelined architecture, polymorphic in its element type. That is, it should handle different number types (float, double, integers) even when the operations on these different types have different timing characteristics. We will see Clash is up for the task, providing a generic description for hardware polymorphic in timing and matrix dimensions. At the end of the series we’ll reflect on the experience and offer thoughts on the difficulties we encountered and how Clash could ease them in the future.*
+*Our goal is to create a flexible yet efficient matrix multiplier. We want a pipelined architecture, polymorphic in its element type. That is, it should handle different number types (float, double, integers) even when the operations on these different types have different timing characteristics. We will see Clash is up for the task, providing a generic description for hardware polymorphic in timing and matrix dimensions. At the end of the post we’ll reflect on the experience and offer thoughts on the difficulties we encountered and how Clash could ease them in the future.*
 
 <hr>
 
@@ -518,7 +518,7 @@ mmmult2dmealy (matrices@(Just (matrixAA, matrixBB)), counter, matrixRR) _ = (sta
 And that's it for implementing a scalable matrix multiplier. To summarize: we can multiply matrices of any size and choose the number of integer multipliers by adjusting the size of the submatrices.
 
 
-### Pipelining `mmult`
+### Pipelining `dot`
 Any circuit's performance is determined by its critical path: the path between two registers incurring the maximum delay in the whole circuit. In the circuit developed so far we're still using the matrix multiplication from the very first part of this blogpost. This chains multiple multiply-add operations together, clearly inducing a very long path:
 
 <img style="margin-left:30%; margin-right:30%;" width="40%" src="images/01-dot.svg" />
@@ -576,7 +576,7 @@ dMultiplyAdd ab c =
 
 Unfortunately, we just broke our definition of `dot`. The delayed version of `multiplyAdd`, `dMultiplyAdd`, is of the form `a -> b -> c` due to differing delays between the two arguments and the result. Still, in this case we could use the result of type `c` as a second argument to another application of `dMultiplyAdd`. In fact, if we would manually unroll the definition of `foldr` in `dot`, we would end up with a perfectly fine Haskell program! Of course, we cannot, since we do not know the number of times we would have to unroll it when writing the function. It could be three times, it could be a thousand, depending on the context. 
 
-Luckily, Clash offers a way out: [dependently typed folds](https://hackage.haskell.org/package/clash-prelude-0.99.2/docs/Clash-Sized-Vector.html#v:dfold). `dfold` asks its users two things:
+Luckily, Clash offers a way out: [dependently typed folds](https://hackage.haskell.org/package/clash-prelude-0.99.2/docs/Clash-Sized-Vector.html#v:dfold). Dependently typed folds can help whenever one wants to fold a function `g :: a -> b -> c`, where `g a c` would type-check. `dfold` asks its users two things:
 
 1. To provide a [type-level function](https://hackage.haskell.org/package/singletons-2.2/docs/Data-Singletons.html#t:TyFun) function which, given the an index *l*, provides the type for a circuit folded *l* times. 
 
@@ -587,36 +587,382 @@ Given this, it promises us a type-checking construct.
 Type level functions can be implemented by providing an [`Apply`](https://hackage.haskell.org/package/singletons-2.2/docs/Data-Singletons.html#t:Apply) instance for it. Instances need a specific type we can match on, so we’ll build a new one:
 
 {{< highlight haskell >}}
-data
-  MultiplyAddFoldedType
-    (n :: Nat)
-    (f :: TyFun Nat *) :: *
+data MultAddFoldedTypeGen (n :: Nat) (f :: TyFun Nat *) :: *
 {{< / highlight >}}
 
-We don’t care about a runtime representation, so we’ll skip an actual implementation. `n` corresponds to the delay our function starts with even before folding the given function even once. `f` represents the function taking a number `l` and returning whatever type we wish: `*` (read `f :: TyFun Nat *` as `f :: Nat -> *`). We can see the `l` being used in the instance:
+We don’t care about a runtime representation, so we’ll skip an actual implementation. `n` corresponds to the delay our function starts with even before folding the given function even once. `f` represents the function taking an integer `l` and returning whatever type we wish: `*` (read `f :: TyFun Nat *` as `f :: Nat -> *`). We can see the `l` being used in the instance:
 
 {{< highlight haskell >}}
-type instance Apply (MultiplyAddFoldedType n) l =
+type instance Apply (MultAddFoldedTypeGen n) l =
   DSignal System (n + l) Int
 {{< / highlight >}}
 
-As `dMultiplyAdd` incurs a delay of 1 and starts with a delay `n`, the delay after folding `l` times is `n + l`.
+As `dMultiplyAdd` incurs a delay of 1 and starts with a delay `n`, the delay after folding `l` times is `n + l`. This concludes the first part required for `dfold`. For the second part, we need to implement a function chaining two parts of the pipeline together:
 
-TODO: clarify implementation
+{{< highlight haskell >}}
+go
+  :: SystemClockReset
+  => SNat l
+  -- ^ Number of times folded already
+  -> DSignal System d (Int, Int)
+  -- ^ Tuple to be multiplied
+  -> DSignal System (d + l) Int
+  -- ^ Input from previous element in pipeline
+  -> DSignal System (d + l + 1) Int
+go (l@SNat) ab c =
+  dMultiplyAdd (delayed (repeat (0, 0)) ab) c
+{{< / highlight >}}
+
+Finally, we can use our type level function `MultAddFoldedTypeGen` and glue function `go` in an application of `dfold` as such:
+
+{{< highlight haskell >}}
+-- | Pipelined version of dot
+dotf
+  :: forall d n
+   . SystemClockReset
+  => KnownNat n
+  => DSignal System d       (Vec n Int)
+  -> DSignal System d       (Vec n Int)
+  -> DSignal System (d + n) Int
+dotf a b =
+  dfold
+    -- Type level function to supply type of /l/th folding
+    (Proxy :: Proxy (MultAddFoldedTypeGen d))
+    -- Chain function:
+    go
+    -- Start value of pipeline:
+    (pure 0)
+    -- Every processing element gets an external input:
+    (DBundle.unbundle $ zip <$> a <*> b)
+    
+  where
+    go = ...
+{{< / highlight >}}
+
+Although this journey so far has given us great insight into how Clash handles types and how to manually build pipelines, it feels like this should have been handled by higher-order functions in the first place. In the source code of this blog you'll therefore find a slightly other version, where our pipelining has been generalized as two functions `foldrp` and `foldrpp`. In the source code you'll therefore find a much simpler implementation of `dotf`:
+
+{{< highlight haskell >}}
+dotf
+  :: SystemClockReset
+  => KnownNat n
+  => DSignal System d       (Vec n Int)
+  -> DSignal System d       (Vec n Int)
+  -> DSignal System (d + n) Int
+dotf a b =
+  foldrp
+    -- Function:
+    (\(a', b') c -> a'*b' + c)
+    -- Defaults for output/input of function:
+    0 (0, 0)
+    -- Vector to fold over:
+    (zip <$> a <*> b)
+    -- Start value:
+    (pure 0)
+{{< / highlight >}}
+
+To summarize, we built a pipelined version of `dot` with the help of delayed signals. We used type level functions to express our type evolving when unfolding our use of `foldr`. Lastly, we built saw the use of higher-order functions - in this case `foldrp` - can immensely help easy of implementation and readability.
 
 
 ### Putting it together again
+We can't use `dotf` in our definition of `mmmult2dmealy` anymore, as the former is described at a signal level, while the latter is described at a value level. A strategy to handle this is to make multiple mealy machines, chained together in a combining function. In our case, we would designate a component with producing the right input for our `dotf` function, and another component processing the results of that pipeline:
 
-### Optimizing indices
+<img style="margin-left:25%; margin-right:25%;" width="50%" src="images/03-dot.svg" />
 
-### Using BlockRAM
+Our new function `mmmult2dreader` is an almost exact copy of our previously defined mealy machine. Instead of doing matrix multiplications though, it produces rows and columns fed to `dotf`:
+
+{{< highlight haskell >}}
+-- | mmmult2dreader stores (sub)matrices and yields a row/column of a submatrix
+-- every cycle.
+mmmult2dreader (Nothing, _) Nothing =
+  -- No input nor state, do nothing:
+  ((Nothing, minBound), Nothing)
+
+mmmult2dreader _ matrices@(Just _) =
+  -- Input; reset progress so far (if any)
+  ((matrices, minBound), Nothing)
+    
+mmmult2dreader (matrices@(Just (matrixAA, matrixBB)), counter) _ =
+  -- Continue calculating, return result if ready.
+  (state', Just (rowA, colB))
+    where
+      -- Calculate new state; if we're done, reset it.
+      state'
+        | counter == maxBound = (Nothing,  succWrap counter)
+        | otherwise           = (matrices, succWrap counter)
+
+      -- Determine order of fetching from A or B and storing it in R.
+      (aColI,  _,     aRowI, saRowI, _)      = counter
+      (bRowI,  bColI, _,     _,      sbColI) = counter
+
+      -- Fetch submatrices and their row/column
+      subA = (matrixAA `index` aRowI) `index` aColI
+      subB = (matrixBB `index` bRowI) `index` bColI
+      rowA = subA                     `index` saRowI
+      colB = (transpose subB)         `index` sbColI
+{{< / highlight >}}
+
+Now that our reader function yields `Maybe` results, we need to change our pipelined dot function to process (and produce) `Maybe` values as well, which we present below. Note that we use `undefined` as an equivalent of `xxxx` in VHDL/Verilog. In fact, this is exactly what the Clash compiler will produce. If all is well though, both our runtime and hardware will never actually use this result. To improve error reporting on runtime we could replace `undefined` with `error "some message"`. Be careful to only use this for values you're convince your code will never use, as an error has simply no meaning on hardware.
+
+{{< highlight haskell >}}
+dotfm
+  :: SystemClockReset
+  => KnownNat n
+  => DSignal System d       (Maybe (Vec n Int, Vec n Int))
+  -> DSignal System (d + n) (Maybe Int)
+dotfm ab =
+  foldrp
+    -- Function:
+    multAdd
+    -- Defaults for output/input of function:
+    Nothing undefined
+    -- Vector to fold over:
+    (uncurry zip . fromJust <$> ab)
+    -- Start value; Nothing on no input, Just 0 on input:
+    ((const 0 <$>) <$> ab)
+
+  where
+    multAdd _      Nothing  = Nothing
+    multAdd (a, b) (Just c) = Just $ a*b + c
+{{< / highlight >}}
+
+The last component we need to write is the component processing the output of our pipelined dot function. This component closely mirrors the structure of our reader. It resets its state if it does not receive an input, and yields its results as soon as it has gathered enough results from the dot function.
+
+{{< highlight haskell >}}
+-- | mmmult2dwriter stores result (sub)matrices and processes results from
+-- the dotf pipeline. It yields results whenever it has gathered enough results.
+mmmult2dwriter _ Nothing =
+  -- No input, reset state
+  ((emptyMatrix nullMatrix, minBound), Nothing)
+
+mmmult2dwriter (matrixRR, counter) (Just dotfResult) = (state', output)
+  where
+    state' = (matrixRR'', succWrap counter)
+
+    (matrixRR'', output)
+      | counter == maxBound = (emptyMatrix nullMatrix, Just matrixRR')
+      | otherwise           = (matrixRR',              Nothing)
+
+    -- Calculate new partial result, store it in matrix R
+    (_, rColI, rRowI, srRowI, srColI) = counter
+
+    subR      = (matrixRR `index` rRowI) `index` rColI
+    subR'     = alterMatrixElement subR srRowI srColI (+dotfResult)
+    matrixRR' = replaceMatrixElement matrixRR rRowI rColI subR'
+{{< / highlight >}}
+
+All that's left to do is to tie the three components together in `mmmult2d`:
+
+{{< highlight haskell >}}
+      -- [1] Reader stage
+      readerOutput :: Signal System (Maybe (Vec aa_sn Int, Vec bb_sm Int))
+      readerOutput = register Nothing $ mealy mmmult2dreader (Nothing, counter) ab'
+
+      -- [2] Dot product pipeline
+      dotfOutput :: Signal System (Maybe Int)
+      dotfOutput = register Nothing $ toSignal $ dotfm $ fromSignal readerOutput
+
+      -- [3] Writer stage
+      writerOutput :: Signal System (Maybe (Matrix aa_m bb_n (Matrix aa_sm bb_sn Int)))
+      writerOutput = mealy mmmult2dwriter (emptyMatrix nullMatrix, counter) dotfOutput
+{{< / highlight >}}
+
+And that's it! In the repository you'll find a slightly more generalized function which can handle an number type, instead of restricting it to only `Int`s. You'll also find a version reading and writing its results from and to blockRAM, which you would find in a more realistic scenario.
 
 # Conclusion and reflection
+We’ve implemented a pipelined matrix multiplication algorithm, parameterizable in such a way that we can easily make a time/space trade-off. During the implementation we’ve seen a lot constructs in Clash. This second will go over some critiques.
+
+## Delayed signals: what are they *really*?
+Delayed signals are an enormously helpful tool in Clash’s toolbox, but it is unclear what the exact semantics  of a delayed signal actually are. In our design we've used it in a pipelined manner, that is: we treat a delayed function f as if it were a non-stateful function but simply with a delay between its in- and output. This is not enforced by the type system in any way though (unclear if that’s even remotely possible), and we can think of at least four other meanings of “delayed”:
+
+1. A delay of *four* could mean inputs and outputs are only valid every 4nth cycle. That is, after supplying an input one should wait for a few clock for an answer. This is incidentally what we do dynamically using a Maybe type in our top-level function `mmult2d`. 
+
+2. A delay of *four* could simply mean the first inputs are ignored and the very first four outputs should be ignored. This could have been used for storing partial results in our matrix multiplication algorithm: the dot product only yields valid results after some time anyway. 
+
+3. A delay of *four* could mean the first four inputs are accepted, but the first four outputs should be ignored. For example, imagine a simple moving average function. Internally it maintains a buffer containing a number of elements. A new incoming element will “push” the oldest value out of its buffer. The output is the average of all values. This would potentially (depending on your goal) an invalid output for the first few averages.
+
+4. A delay of *four* could mean the first four inputs are ignored, but the outputs are already valid. 
+
+In fact, it’s not even clear what a “delay” means for a signal on its own. I’d argue that what we actually want to express is a notion of “scheduled validness” or its converse “scheduled undefinedness”. I.e., a signal’s validness could then be defined as the pseudocode:
+
+{{< highlight haskell >}}
+KnownNat p => KnownNat k => forall n. Signal dom (n*p + k) a
+{{< / highlight >}}
+
+Where *p* is a period, *k* is an offset and *n* is a natural number. The first valid value for this signal is the expressed by *k*, while it would also produce a valid value for *k+p*, *k+2p*, … . An actual definition of such as “scheduled signal” could look like:
+
+{{< highlight haskell >}}
+data SSignal (period :: Nat, offset :: Nat) (dom :: Domain) a = ...
+{{< / highlight >}}
+
+where a “normal” Signal could be expressed as:
+
+{{< highlight haskell >}}
+type Signal (dom :: Domain) a = SSignal (1, 0) dom a
+{{< / highlight >}}
+
+Various methods could be implemented to make it easy to work with and synchronize otherwise out-of-step signals:
+
+{{< highlight haskell >}}
+-- | Sync offsets by buffering
+syncOffset
+  :: SSignal dom (pb, oa + o) b
+  -> SSignal dom (pa, oa) a
+  -> SSignal dom (pa, oa + o) a
+syncOffset _ = ...
+
+-- | Sync periods by buffering
+syncPeriod
+  :: p ~ LCM pa pb
+  => p ~ npa * pa
+  => p ~ npb * pb
+  => SSignal dom (pa, o) a
+  -> SSignal dom (pb, o) b
+  -> SSignal dom (p, p+o) (Vec npa a, Vec npb b)
+syncPeriod a b = ...
+
+-- | Synchronize signals's periods and offsets
+sync a b =
+  syncPeriod (syncOffset a b) b
+{{< / highlight >}}
+
+Scheduling information could even be used to automatically enabled and disable circuits, depending on how they’re combined with other slower circuits.
+
+All in all, Clash could do with much better integrated support for “delayed” signals. Having this concept at a type level could prove very useful indeed. Most importantly, it could give the programmer a sense of security knowing the compiler checked for synchronization mismatches. Perhaps a future blogpost could work something out..
+
+## Pipelining: we need a stdlib
+
+Clash pipelining capabilities are quite powerful. In combination with delayed signals dependently typed folds are capable of providing a relatively easy way of inserting registers at the right places. While existing functions in Clash cover this, specialized functions for pipelining circuits could provide more a more comfortable way of dealing with dependently typed folds. While writing this blogpost, we developed two (see repository):
+
+{{< highlight haskell >}}
+-- | Pipelined foldl. Function itself is not pipelined, but a single register
+-- will be added after it.
+foldrp
+  :: forall dom a b startDelay n
+   . forall gated synchronous
+   . HiddenClockReset dom gated synchronous
+  => KnownNat n
+  => (a -> b -> b)
+  -- ^ f
+  -> b
+  -- ^ Default output
+  -> a
+  -- ^ Default input
+  -> DSignal dom startDelay (Vec n a)
+  -- ^ Vector to fold over
+  -> DSignal dom startDelay b
+  -- ^ Start value
+  -> DSignal dom (startDelay + n) b
+foldrp = ...
+{{< / highlight >}}
+
+and
+
+{{< highlight haskell >}}
+-- | Pipelined foldl. Function itself might be pipelined.
+foldrpp
+  :: forall dom a b procDelay startDelay n
+   . forall gated synchronous
+   . HiddenClockReset dom gated synchronous
+  => KnownNat n
+  => KnownNat procDelay
+  => (forall d. DSignal dom d a -> DSignal dom d b -> DSignal dom (d + procDelay) b)
+  -- ^ Possibly pipelined function
+  -> a
+  -- ^ Default
+  -> DSignal dom startDelay (Vec n a)
+  -- ^ Vector to fold over
+  -> DSignal dom startDelay b
+  -- ^ Start value
+  -> DSignal dom (startDelay + (n*procDelay)) b
+foldrpp f = ...
+{{< / highlight >}}
+
+while this helped a lot, the fact that we had to write it ourselves is less than ideal. Clash should provided constructs like these in an officially supported or its own library. In a next blogpost, we will develop a set of these functions.
 
 # FAQ
 
 ## What is `KnownNat n`?
+Like *Num*, *KnownNat* is a typeclass. This class does not implement any interesting functions, but allows code to access compile-time numbers (such as the length of a vector) at runtime. If you forget to add a constraint, you might get an error looking like:
+
+```
+src/Main.hs:55:3: error:
+    Could not deduce (KnownNat n) arising from a use of ‘sum’
+    from the context: Num a
+      bound by the type signature for:
+                 dot :: forall a (n :: Nat). Num a => Vec n a -> Vec n a -> a
+      at src/Main.hs:(49,1)-(53,6)
+    Possible fix:
+      add (KnownNat n) to the context of
+        the type signature for:
+          dot :: forall a (n :: Nat). Num a => Vec n a -> Vec n a -> a
+   |
+55 |   sum $ zipWith (*) a b
+   |   ^^^^^^^^^^^^^^^^^^^^^
+```
+
+In this case, `sum` needs to access the number `n` at runtime, but the function `dot` didn't require it.
 
 ## Why does `sum` only accept non-empty vectors?
+If you accepted the challenge to convert the non-synthesizable code to code that can be, you might have seen the following error when redefining `dot`:
+
+```
+src/Main.hs:55:3: error:
+    • Couldn't match type ‘1 <=? n’ with ‘'True’
+        arising from a use of ‘sum’
+    • In the expression: sum $ zipWith (*) a b
+      In an equation for ‘dot’: dot a b = sum $ zipWith (*) a b
+    • Relevant bindings include
+        b :: Vec n a (bound at src/Main.hs:54:7)
+        a :: Vec n a (bound at src/Main.hs:54:5)
+        dot :: Vec n a -> Vec n a -> a (bound at src/Main.hs:54:1)
+   |
+55 |   sum $ zipWith (*) a b
+   |   ^^^^^^^^^^^^^^^^^^^^^
+```
+
+`sum` apparently expects a vector of at least a length of 1! Or as GHC puts it: `Couldn't match type ‘1 <=? n’ with ‘'True’`. This might seem strange, as the implementation on lists works just fine. This is an unfortunate historic artifact of Haskell: `sum` is defined in terms of `Foldable`, which was formed way before the relevancy of dependent types. Many functions where defined partially, meaning they will emit an error if given an empty list. Clash has the ability to enforce these lengths statically. It could therefore choose to implement these partial functions, giving up some powerful static promises. It has therefore been decided to only allow vectors with at least one element, rendering all functions on `Foldable` completely defined.
+
+Solutions come in roughly three forms:
+
+1. Add `1 <= n` as a constraint to your function. This makes the caller responsible for providing “correct” vectors. In case of a dot product, this is not perfect though: the mathematical definition perfectly allows for empty vectors. 
+
+2. Hack your way around it. In case of `dot`, this means appending a single zero to the result of `zipWith`, i.e.:  `sum $ 0 :> zipWith (*) a b`. This is perfectly fine, but might incur a very small performance hit both in simulation and synthetization. 
+
+3. Define your own `sum`, not based on `Foldable`. 
 
 ## What does `Couldn't match type ‘ax’ with ‘by’` mean?
+If you forgot to include `ax ~ by` you might have seen an error saying Clash figured out that `ax` and `by` should be equal, but that it can’t prove it. 
+
+```
+src/Main.hs:47:43: error:
+    • Couldn't match type ‘ax’ with ‘by’
+      ‘ax’ is a rigid type variable bound by
+        the type signature for:
+          mmult :: forall a (ay :: Nat) (ax :: Nat) (by :: Nat) (bx :: Nat).
+                   Num a =>
+                   Vec ay (Vec ax a) -> Vec by (Vec bx a) -> Vec ay (Vec bx a)
+        at src/Main.hs:(37,1)-(44,22)
+      ‘by’ is a rigid type variable bound by
+        the type signature for:
+          mmult :: forall a (ay :: Nat) (ax :: Nat) (by :: Nat) (bx :: Nat).
+                   Num a =>
+                   Vec ay (Vec ax a) -> Vec by (Vec bx a) -> Vec ay (Vec bx a)
+        at src/Main.hs:(37,1)-(44,22)
+      Expected type: Vec ay (Vec by a)
+        Actual type: Vec ay (Vec ax a)
+    • In the second argument of ‘map’, namely ‘a’
+      In the expression: map (\ ar -> map (dot ar) (transpose b)) a
+      In an equation for ‘mmult’:
+          mmult a b = map (\ ar -> map (dot ar) (transpose b)) a
+    • Relevant bindings include
+        b :: Vec by (Vec bx a) (bound at src/Main.hs:46:9)
+        a :: Vec ay (Vec ax a) (bound at src/Main.hs:46:7)
+        mmult :: Vec ay (Vec ax a)
+                 -> Vec by (Vec bx a) -> Vec ay (Vec bx a)
+          (bound at src/Main.hs:46:1)
+   |
+47 |   map (\ar -> map (dot ar) (transpose b)) a
+   |                                           ^
+```
+
+Although not quite obvious, this constraint is requested by `dot` (in this case), which asks for its given vectors to be of equal length. Of course, this is exactly what we want! Matrix multiplications don’t make sense if `ax` differs from `by`.

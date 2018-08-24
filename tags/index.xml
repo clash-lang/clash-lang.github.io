@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Tags on Clash</title>
+    <link>https://clash-lang.org/tags/</link>
+    <description>Recent content in Tags on Clash</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Wed, 25 Jul 2018 00:00:00 +0000</lastBuildDate>
+    
+	<atom:link href="https://clash-lang.org/tags/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>Design</title>
+      <link>https://clash-lang.org/tags/design/</link>
+      <pubDate>Wed, 25 Jul 2018 00:00:00 +0000</pubDate>
+      
+      <guid>https://clash-lang.org/tags/design/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Matrices</title>
+      <link>https://clash-lang.org/tags/matrices/</link>
+      <pubDate>Mon, 09 Jul 2018 00:00:00 +0000</pubDate>
+      
+      <guid>https://clash-lang.org/tags/matrices/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Systolic Arrays</title>
+      <link>https://clash-lang.org/tags/systolic-arrays/</link>
+      <pubDate>Wed, 25 Jul 2018 00:00:00 +0000</pubDate>
+      
+      <guid>https://clash-lang.org/tags/systolic-arrays/</guid>
+      <description></description>
+    </item>
+    
+  </channel>
+</rss>

@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+    
+        
+            <title>Clash: Home</title>
+        
+    
+
+	<meta name="description" content="">
+	<meta name="generator" content="Hugo 0.44" />
+	<meta property="og:title" content="Home" />
+<meta property="og:description" content="" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://clash-lang.org/" />
+
+
+
+<meta property="og:updated_time" content="2018-07-25T00:00:00&#43;00:00"/>
+
+
+
+
+
+
+
+
+
+
+	
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="alternate" type="application/rss&#43;xml" href="/index.xml">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+	<link rel="stylesheet" href="/css/style.css">
+	<link rel="stylesheet" href="/css/syntax.css">
+	<script type="text/javascript" src="/js/scripts.js"></script>
+	<script type="text/javascript" src="/js/jquery-3.3.1.min.js"></script>
+	<link rel="shortcut icon" href="/media/logos/favicon.png">
+	
+</head>
+<body class="body body-no-sidebar">
+	<div class="container container-outer">
+		<header class="header">
+			
+<nav class="menu">
+    
+        
+    
+
+	<ul class="menu__list">
+		<li class="menu__item"><a class="menu__link" href="/support/">Support plan</a></li>
+		<li class="menu__item"><a class="menu__link" href="/news/">News</a></li>
+		<li class="menu__item"><a class="menu__link" href="/blog/">Blog</a></li>
+		<li class="menu__item"><a class="menu__link" href="/publications/">Publications</a></li>
+		<li class="menu__item"><a class="menu__link" href="/documentation/">Documentation</a></li>
+		<li class="menu__item"><a class="menu__link" href="/downloads/">Downloads</a></li>
+	</ul>
+</nav>
+
+
+		</header>
+        
+        
+        <div class="clash-banner">
+            <div class="logo"></div>
+            <div class="logo__inner">
+                <div class="logo__title">Clash</div>
+                <div class="logo__tagline">A modern, functional, hardware description language</div>
+            </div>
+        </div>
+        
+        
+		<div class="wrapper clearfix">
+
+<style>main{ margin-right: 0!important; }</style>
+
+
+
+	<main class="main list" role="main">
+		<div class="post__content clearfix">
+			
+
+<p><strong>Clash</strong> is a functional hardware description language that borrows both its syntax and semantics from the functional programming language <strong>Haskell</strong>. It provides a familiar structural design approach to both combinational and synchronous sequential circuits. The Clash compiler transforms these high-level descriptions to low-level synthesizable <strong>VHDL</strong>, <strong>Verilog</strong>, or <strong>SystemVerilog</strong>. Clash is open-source, licensed under BSD.</p>
+
+<p>Clash is mainly <a href="https://qbaylogic.com/">developed by QBayLogic</a>. If you need professional support from the original developers of Clash, head over to <a href="/support/">support plan</a>.</p>
+
+<h1 id="features">Features</h1>
+
+<div class="cards250">
+    <div class="card">
+        <h2>Strongly typed</h2>
+        <p>Clash is built on Haskell which provides an excellent foundation for well-typed code. Together with Clash's standard library it is easy to build scalable and reusable hardware designs.</p>
+    </div>
+    <div class="card">
+        <h2>Interactive REPL</h2>
+        <p>Load your designs in an interpreter and easily test all your component without needing to setup a test bench.</p>
+    </div>
+    <div class="card">
+        <h2>Low-level access</h2>
+        <p>Although Clash offers many features, you sometimes need to directly access VHDL, Verilog, or SystemVerilog directly. Clash allows you to do this with its own templating system.</p>
+    </div>
+</div>
+
+<h1 id="installing">Installing</h1>
+
+<p>On Ubuntu (or any Linux distribution running <code>snap</code>) run:</p>
+
+<div class="highlight"><pre><code class="language-bash" data-lang="bash">snap install clash
+</code></pre></div>
+
+
+<p>On macOS run:</p>
+
+<div class="highlight"><pre><code class="language-bash" data-lang="bash">brew install clash
+</code></pre></div>
+
+
+<p>On Windows run:</p>
+
+<div class="highlight"><pre><code class="language-bash" data-lang="bash">choco install clash
+</code></pre></div>
+
+
+<p>On any system running Cabal ≥ 2.2, GHC ≥ 8.4 run:</p>
+
+<div class="highlight"><pre><code class="language-bash" data-lang="bash">cabal new-install clash-ghc
+</code></pre></div>
+
+
+<p>See <a href="#">compiling from source</a> for development versions or other platforms.</p>
+
+<h1 id="examples">Examples</h1>
+
+<div class="cards450">
+    <div class="card">
+        <h2>FIR Filter</h2>
+        <p>Clash allows programmers to write function without hardcoded length or element type information, such as this FIR filter:</p>
+        <p>
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">fir</span> <span class="n">coeffs</span> <span class="n">x</span> <span class="ow">=</span> <span class="n">dotp</span> <span class="n">coeffs</span> <span class="p">(</span><span class="n">window</span> <span class="n">x</span><span class="p">)</span>
+  <span class="kr">where</span>
+    <span class="n">dotp</span> <span class="n">as</span> <span class="n">bs</span> <span class="ow">=</span> <span class="n">sum</span> <span class="p">(</span><span class="n">zipWith</span> <span class="p">(</span><span class="o">*</span><span class="p">)</span> <span class="n">as</span> <span class="n">bs</span><span class="p">)</span>
+</code></pre></div>
+
+        </p>
+        <p>Clash will figure out the type of this function through its powerful type interference system. To "lock" types in place, we can partially apply `fir`: </p>
+        <p>
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="c1">-- inferred: Signal dom Int -&gt; Signal dom Int</span>
+<span class="nf">fir3int</span> <span class="ow">=</span> <span class="n">fir</span> <span class="p">(</span><span class="mi">3</span> <span class="kt">:&gt;</span> <span class="mi">4</span> <span class="kt">:&gt;</span> <span class="mi">5</span> <span class="kt">:&gt;</span> <span class="kt">Nil</span><span class="p">)</span>
+
+<span class="c1">-- inferred: Signal dom Float -&gt; Signal dom Float</span>
+<span class="nf">fir4float</span> <span class="ow">=</span> <span class="n">fir</span> <span class="p">(</span><span class="mf">3.5</span> <span class="kt">:&gt;</span> <span class="mf">4.2</span> <span class="kt">:&gt;</span> <span class="mf">3.0</span> <span class="kt">:&gt;</span> <span class="mf">6.1</span> <span class="kt">:&gt;</span> <span class="kt">Nil</span><span class="p">)</span>
+</code></pre></div>
+
+        </p>
+    </div>
+    <div class="card">
+        <h2>Matrix multiplication</h2>
+        <p> If you do choose to write types explicitely, you can add additional constraints. Clash will check these constraints and refuse to compile if they are not met. The following example implements a fully parallel matrix multiplication algorithm:
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">mmult</span>
+  <span class="c1">-- Dimension constraints:</span>
+  <span class="ow">::</span> <span class="n">na</span> <span class="o">~</span> <span class="n">mb</span>
+  <span class="ow">=&gt;</span> <span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">mb</span>
+  
+  <span class="c1">-- Allow simulation to access mb/nb:</span>
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">mb</span>
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">nb</span>
+  
+  <span class="c1">-- Arguments:</span>
+  <span class="ow">=&gt;</span> <span class="kt">Vec</span> <span class="n">ma</span> <span class="p">(</span><span class="kt">Vec</span> <span class="n">na</span> <span class="kt">Int</span><span class="p">)</span>
+  <span class="ow">-&gt;</span> <span class="kt">Vec</span> <span class="n">mb</span> <span class="p">(</span><span class="kt">Vec</span> <span class="n">nb</span> <span class="kt">Int</span><span class="p">)</span>
+  
+  <span class="c1">-- Result:</span>
+  <span class="ow">-&gt;</span> <span class="kt">Vec</span> <span class="n">ma</span> <span class="p">(</span><span class="kt">Vec</span> <span class="n">nb</span> <span class="kt">Int</span><span class="p">)</span>
+
+<span class="nf">mmult</span> <span class="n">mA</span> <span class="n">mB</span> <span class="ow">=</span> <span class="n">result</span>
+  <span class="kr">where</span>
+    <span class="n">mBT</span>      <span class="ow">=</span> <span class="n">transpose</span> <span class="n">mB</span>
+    <span class="n">dot</span> <span class="n">a</span> <span class="n">b</span>  <span class="ow">=</span> <span class="n">sum</span> <span class="o">$</span> <span class="n">zipWith</span> <span class="p">(</span><span class="o">*</span><span class="p">)</span> <span class="n">a</span> <span class="n">b</span>
+    <span class="n">result</span>   <span class="ow">=</span> <span class="n">map</span> <span class="p">(</span><span class="nf">\</span><span class="n">ar</span> <span class="ow">-&gt;</span> <span class="n">dot</span> <span class="n">ar</span> <span class="o">&lt;$&gt;</span> <span class="n">mBT</span><span class="p">)</span> <span class="n">mA</span>
+</code></pre></div>
+
+        </p>
+    </div>
+
+<p></div></p>
+
+<h1 id="support-and-community">Support and community</h1>
+
+<p>Clash is an open-source community backed project, <a href="">hosted on GitHub</a> and maintained by <a href="https://qbaylogic.com/">QBayLogic</a>.</p>
+
+<style>
+.post__title{ display:none; }
+</style>
+
+		</div>
+	</main>
+
+	</div>
+		<footer class="footer">
+			<div class="container container-inner">
+				<div class="footer__copyright">&copy; 2018 clash-lang.org</div>
+			</div>
+		</footer>
+	</div>
+
+<script>
+	var navigation = responsiveNav(".menu", {
+		navClass: "menu--collapse",
+	});
+</script>
+</body>
+</html>
+

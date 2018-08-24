@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+    
+        
+            <title>Clash: Building systolic arrays with Clash</title>
+        
+    
+
+	<meta name="description" content="Building a ">
+	<meta name="generator" content="Hugo 0.44" />
+	<meta property="og:title" content="Building systolic arrays with Clash" />
+<meta property="og:description" content="Building a " />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://clash-lang.org/blog/0002-systolic-arrays/" />
+
+
+
+<meta property="article:published_time" content="2018-07-25T00:00:00&#43;00:00"/>
+
+<meta property="article:modified_time" content="2018-07-25T00:00:00&#43;00:00"/>
+
+
+
+
+
+
+
+
+
+
+
+	
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+	<link rel="stylesheet" href="/css/style.css">
+	<link rel="stylesheet" href="/css/syntax.css">
+	<script type="text/javascript" src="/js/scripts.js"></script>
+	<script type="text/javascript" src="/js/jquery-3.3.1.min.js"></script>
+	<link rel="shortcut icon" href="/media/logos/favicon.png">
+	
+</head>
+<body class="body body-no-sidebar">
+	<div class="container container-outer">
+		<header class="header">
+			
+<nav class="menu">
+    
+        
+            <a href="/">
+    <div class="menu__logo">
+        <div class="menu__logo__inner">clash-lang.org</div>
+    </div>
+</a>
+
+
+        
+    
+
+	<ul class="menu__list">
+		<li class="menu__item"><a class="menu__link" href="/support/">Support plan</a></li>
+		<li class="menu__item"><a class="menu__link" href="/news/">News</a></li>
+		<li class="menu__item"><a class="menu__link" href="/blog/">Blog</a></li>
+		<li class="menu__item"><a class="menu__link" href="/publications/">Publications</a></li>
+		<li class="menu__item"><a class="menu__link" href="/documentation/">Documentation</a></li>
+		<li class="menu__item"><a class="menu__link" href="/downloads/">Downloads</a></li>
+	</ul>
+</nav>
+
+
+		</header>
+        
+        
+        
+		<div class="wrapper clearfix">
+
+
+<main class="main content">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Building systolic arrays with Clash</h1><div class="post__meta meta">
+<svg class="icon icon-time" width="16" height="14" viewBox="0 0 16 16"><path d="m8-.0000003c-4.4 0-8 3.6-8 8 0 4.4000003 3.6 8.0000003 8 8.0000003 4.4 0 8-3.6 8-8.0000003 0-4.4-3.6-8-8-8zm0 14.4000003c-3.52 0-6.4-2.88-6.4-6.4000003 0-3.52 2.88-6.4 6.4-6.4 3.52 0 6.4 2.88 6.4 6.4 0 3.5200003-2.88 6.4000003-6.4 6.4000003zm.4-10.4000003h-1.2v4.8l4.16 2.5600003.64-1.04-3.6-2.1600003z"/></svg>
+<time class="post__meta-date meta-date" datetime="2018-07-25T00:00:00">July 25, 2018</time>
+<span class="post__meta-categories meta-categories">
+	<svg class="icon icon-category" width="16" height="16" viewBox="0 0 16 16"><path d="m7 2l1 2h8v11h-16v-13z"/></svg>
+	<span class="meta-categories__list"><a class="meta-categories__link" href="/categories/tutorial" rel="category">Tutorial</a></span>
+</span></div>
+		</header>
+<div class="post__toc toc">
+	<div class="toc__title">Page content</div>
+	<div class="toc__menu">
+		<nav id="TableOfContents">
+<ul>
+<li><a href="#concepts">Concepts</a></li>
+<li><a href="#generic-systolic-array">Generic systolic array</a></li>
+<li><a href="#delayed-systolic-array">Delayed systolic array</a></li>
+<li><a href="#matrix-multiplication">Matrix multiplication</a>
+<ul>
+<li><a href="#general-matrix-multiplication">General matrix multiplication</a></li>
+<li><a href="#m-equals-n"><code>m</code> equals <code>n</code></a></li>
+<li><a href="#a-quick-note-on-pipelined-processing-elements">A quick note on pipelined processing elements</a></li>
+</ul></li>
+<li><a href="#triangular-systolic-arrays">Triangular systolic arrays</a></li>
+<li><a href="#matrix-triangularization">Matrix triangularization</a></li>
+<li><a href="#conclusion">Conclusion</a></li>
+</ul>
+</nav>
+	</div>
+</div>
+<div class="post__content clearfix">
+			
+
+<p>Systolic arrays are networks of locally coupled processing elements, continuously receiving and sending their inputs and outputs from and to their neighbors. They cannot access main memory or global buses, thus allowing them to keep critical paths short. Because of this, they are extremely good at solving problems in the field of image processing, artificial intelligence, and computer vision. This blogpost will take a look at how to build systolic arrays with Clash and subsequently build a matrix multiplier with it. If you&rsquo;re new to Clash or matrix multiplication, <a href="/blog/0001-matrix-multiplication/">read this blogpost first</a>.</p>
+
+<h1 id="concepts">Concepts</h1>
+
+<p>Let&rsquo;s first have a look at a simple systolic array where each processing element has an input from their left and upper neighbor, and an output to their right and bottom neighbor. It looks like:</p>
+
+<p><center><img src="/blog/0002-systolic-arrays/LeftTopPE.svg"></img></center></p>
+
+<p>Processing elements can do arbitrary things with their inputs and pass arbitrary things as their outputs, but we&rsquo;ll keep it simple for now. The following example consists of processing elements which each simply pass along the data they receive from their left neighbour to their right neighbor. Similarly, they pass their top input to their bottom neighbor. Simulating a grid of three by three for a total of nine processing elements looks like:</p>
+
+<div class="sysarray" id="mm0">
+    <center>
+        <table></table>
+        <button class="next">Next</button>
+        <button class="reset">Reset</button>
+    </center>
+</div>
+
+<p><br/></p>
+
+<p>Yellow elements move to the right every cycle, while blue ones move to the bottom. As can be seen, not every processing element can has two (valid) inputs at all points in the simulation. This is not always an issue, but many systolic array applications would like <code>G</code> and <code>8</code> to end up in the same cell at the same time. By delaying the inputs strategically, this ends up being true:</p>
+
+<div class="sysarray" id="mm1">
+    <center>
+        <table></table>
+        <button class="next">Next</button>
+        <button class="reset">Reset</button>
+    </center>
+</div>
+
+<p><br/></p>
+
+<p>In fact, all values of the yellow rows end up in the same cell (at different times) as the values in the blue columns. I that makes you think of matrix multiplication, well, that&rsquo;s because it is! By changing the processing elements to perform multiply-accumulate we end up with a fully piplelined and parallelly executing matrix multiplier:</p>
+
+<div class="sysarray" id="mm2">
+    <center>
+        <table></table>
+        <button class="next">Next</button>
+        <button class="reset">Reset</button>
+    </center>
+</div>
+
+<p><br/></p>
+
+<p>An example with actually multiplies two concrete matrices:</p>
+
+<div class="sysarray" id="mm4">
+    <center>
+        <table></table>
+        <button class="next">Next</button>
+        <button class="reset">Reset</button>
+    </center>
+</div>
+
+<p><br/></p>
+
+<p>Lots of other applications exist, such as matrix inversion, correlation, and QR decomposition. We&rsquo;ll implement some of them in this post.</p>
+
+<h1 id="generic-systolic-array">Generic systolic array</h1>
+
+<p>A generic systolic array consists of processing elements consuming and producing from and to all their direct neighbors, chained together to create that large interconnected structure. A single processing element therefore looks like:</p>
+
+<p><center><img src="/blog/0002-systolic-arrays/LinearPE.svg"></img></center></p>
+
+<p>Apart from style choices, its type is fairly straightforward in Clash. We simply define it as a function taking four inputs, and producing four outputs. For debugging purposes, each processing element will also receive its index in the systolic array. One might later use this in combination with <code>trace</code>. To ease working with this function later, it is defined in its <a href="https://wiki.haskell.org/Currying">uncurried form</a>.</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="kr">type</span> <span class="kt">ProcessingElement</span> <span class="n">dom</span> <span class="n">m</span> <span class="n">n</span> <span class="n">lr</span> <span class="n">rl</span> <span class="n">tb</span> <span class="n">bt</span>
+   <span class="ow">=</span> <span class="p">(</span> <span class="p">(</span><span class="kt">Index</span> <span class="n">m</span><span class="p">,</span> <span class="kt">Index</span> <span class="n">n</span><span class="p">)</span>
+     <span class="p">,</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="n">lr</span>
+     <span class="p">,</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="n">rl</span>
+     <span class="p">,</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="n">tb</span>
+     <span class="p">,</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="n">bt</span>
+     <span class="p">)</span>
+  <span class="ow">-&gt;</span> <span class="p">(</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="n">lr</span>
+     <span class="p">,</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="n">rl</span>
+     <span class="p">,</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="n">tb</span>
+     <span class="p">,</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="n">bt</span>
+     <span class="p">)</span>
+</code></pre></div>
+
+
+<p>In order to create a systolic array these processing elements need to be chained together. Let&rsquo;s first focus on creating a single column of processing elements, which -for a column of three elements- looks like:</p>
+
+<p><center><img style="min-width:25%" src="/blog/0002-systolic-arrays/SysColumn.svg"></img></center></p>
+
+<p>Any function constructing the array above would need to (internally) construct the colored edges, given the uncolored ones. In code, we&rsquo;ll use the following names for the inputs:</p>
+
+<ul>
+<li><code>tb</code>: the input at the start of the &lsquo;top to bottom&rsquo; chain. Marked in the diagram as <code>TB_0</code>.</li>
+<li><code>bt</code>: the input at the start of the &lsquo;bottom to top&rsquo; chain. Marked in the diagram as <code>BT_0</code></li>
+<li><code>lrs</code>: inputs from left to right. <code>LR_0</code>, <code>LR_1</code>, &hellip;</li>
+<li><code>rls</code>, <code>tbs</code>, <code>bts</code>: analogous to <code>lrs</code></li>
+</ul>
+
+<p>And the following names for the outputs:</p>
+
+<ul>
+<li><code>tb'</code>: the output at the end of the &lsquo;top to bottom&rsquo; chain. Marked in the diagram as <code>TB_3</code>.</li>
+<li><code>bt'</code>: the output at the end of the &lsquo;bottom to top&rsquo; chain. Marked in the diagram as <code>BT_3</code></li>
+<li><code>lrs'</code>: outputs from left to right. <code>LR_0*</code>, <code>LR_1*</code>, &hellip;</li>
+<li><code>rls'</code>, <code>tbs'</code>, <code>bts'</code>: analogous to <code>lrs'</code></li>
+</ul>
+
+<p>Additionally, we create the indices assuming we&rsquo;ve got some <code>n</code> in context: <code>mn = zip indicesI (repeat n)</code>. Again, this is for debugging purposes only. The trick to creating the columns is to take a leap of faith and just <em>assume</em> all variables are well-defined. Then it is simply a matter of mapping over these inputs and applying them to the processing element function. (<code>pelem'</code> is a slightly modified version of the user-supplied processing elements, which will be explained later on.)</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell">  <span class="p">(</span><span class="n">lrs&#39;</span><span class="p">,</span> <span class="n">rls&#39;</span><span class="p">,</span> <span class="n">tbs&#39;</span><span class="p">,</span> <span class="n">bts&#39;</span><span class="p">)</span> <span class="ow">=</span> <span class="n">unzip4</span> <span class="o">$</span> <span class="n">map</span> <span class="n">pelem&#39;</span> <span class="o">$</span> <span class="n">zip5</span> <span class="n">mn</span> <span class="n">lrs</span> <span class="n">rls</span> <span class="n">tbs</span> <span class="n">bts</span>
+</code></pre></div>
+
+
+<p>The diagram indicates that our function already has <code>rls</code> and <code>lrs</code>, so we don&rsquo;t have to think about those. However, <code>tbs</code> and <code>bts</code> are missing. Let&rsquo;s focus on <code>tbs</code> first, which consists of all top-bottom <em>inputs</em> to the processing elements, i.e. <code>TB_0</code>, <code>TB_1</code>, and <code>TB_2</code>. We do have <code>TB_0</code> as an input to our function, but the others are still missing. However, we also know <code>tbs'</code> consists of all top-bottom <em>outputs</em> to the processing elements, i.e. <code>TB_1</code>, <code>TB_2</code>, and <code>TB_3</code>. Thus:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell">  <span class="n">tbs</span> <span class="ow">=</span> <span class="n">tb</span> <span class="kt">:&gt;</span> <span class="n">init</span> <span class="n">tbs&#39;</span>
+</code></pre></div>
+
+
+<p>We can define <code>bts</code> similarly. We then end up with a single function constructing a single column of the systolic array:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">syscol</span> <span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">lrs</span><span class="p">,</span> <span class="n">rls</span><span class="p">,</span> <span class="n">tb</span><span class="p">,</span> <span class="n">bt</span><span class="p">)</span> <span class="ow">=</span> <span class="p">(</span><span class="n">lrs&#39;</span><span class="p">,</span> <span class="n">rls&#39;</span><span class="p">,</span> <span class="n">tb&#39;</span><span class="p">,</span> <span class="n">bt&#39;</span><span class="p">)</span>
+  <span class="kr">where</span>
+    <span class="n">mn</span> <span class="ow">=</span> <span class="n">zip</span> <span class="n">indicesI</span> <span class="p">(</span><span class="n">repeat</span> <span class="n">n</span><span class="p">)</span>
+
+    <span class="p">(</span><span class="n">lrs&#39;</span><span class="p">,</span> <span class="n">rls&#39;</span><span class="p">,</span> <span class="n">tbs&#39;</span><span class="p">,</span> <span class="n">bts&#39;</span><span class="p">)</span> <span class="ow">=</span>
+      <span class="n">unzip4</span> <span class="o">$</span> <span class="n">map</span> <span class="n">pelem&#39;</span> <span class="o">$</span> <span class="n">zip5</span> <span class="n">mn</span> <span class="n">lrs</span> <span class="n">rls</span> <span class="n">tbs</span> <span class="n">bts</span>
+
+    <span class="n">tbs</span> <span class="ow">=</span> <span class="n">tb</span> <span class="kt">:&gt;</span> <span class="n">init</span> <span class="n">tbs&#39;</span>
+    <span class="n">bts</span> <span class="ow">=</span> <span class="n">tail</span> <span class="n">bts&#39;</span> <span class="kt">:&lt;</span> <span class="n">bt</span>
+    <span class="n">tb&#39;</span> <span class="ow">=</span> <span class="n">last</span> <span class="n">tbs&#39;</span>
+    <span class="n">bt&#39;</span> <span class="ow">=</span> <span class="n">head</span> <span class="n">bts&#39;</span>
+</code></pre></div>
+
+
+<p>To create a the whole array, we apply the same strategy again. Instead of using <code>pelem'</code>, we&rsquo;ll use <code>syscol</code> and instead of dealing with vectors of signals, we have to deal with vectors of vectors of signals to accomodate all the right-left / left-right connections between each column.</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">systolicArray2D</span> <span class="n">pelem</span> <span class="n">lrs</span> <span class="n">rls</span> <span class="n">tbs</span> <span class="n">bts</span> <span class="ow">=</span> <span class="p">(</span><span class="n">lrs&#39;&#39;&#39;</span><span class="p">,</span> <span class="n">rls&#39;&#39;&#39;</span><span class="p">,</span> <span class="n">tbs&#39;&#39;&#39;</span><span class="p">,</span> <span class="n">bts&#39;&#39;&#39;</span><span class="p">)</span>
+  <span class="kr">where</span>
+    <span class="c1">-- From `Signal dom (Vec m a)` to `Vec m (Signal dom a)`:</span>
+    <span class="p">(</span><span class="n">lrs&#39;</span><span class="p">,</span> <span class="n">rls&#39;</span><span class="p">,</span> <span class="n">tbs&#39;</span><span class="p">,</span> <span class="n">bts&#39;</span><span class="p">)</span> <span class="ow">=</span>
+      <span class="p">(</span><span class="n">unbundle</span> <span class="n">lrs</span><span class="p">,</span> <span class="n">unbundle</span> <span class="n">rls</span><span class="p">,</span> <span class="n">unbundle</span> <span class="n">tbs</span><span class="p">,</span> <span class="n">unbundle</span> <span class="n">bts</span><span class="p">)</span>
+
+    <span class="c1">-- Tie PE columns together:</span>
+    <span class="p">(</span><span class="n">lrss&#39;</span><span class="p">,</span> <span class="n">rlss&#39;</span><span class="p">,</span> <span class="n">tbs&#39;&#39;</span><span class="p">,</span> <span class="n">bts&#39;&#39;</span><span class="p">)</span> <span class="ow">=</span>
+      <span class="n">unzip4</span> <span class="o">$</span> <span class="n">map</span> <span class="n">syscol</span> <span class="o">$</span> <span class="n">zip5</span> <span class="n">indicesI</span> <span class="n">lrss</span> <span class="n">rlss</span> <span class="n">tbs&#39;</span> <span class="n">bts&#39;</span>
+
+    <span class="n">lrss</span>  <span class="ow">=</span> <span class="n">lrs&#39;</span> <span class="kt">:&gt;</span> <span class="n">init</span> <span class="n">lrss&#39;</span>
+    <span class="n">rlss</span>  <span class="ow">=</span> <span class="n">tail</span> <span class="n">rlss&#39;</span> <span class="kt">:&lt;</span> <span class="n">rls&#39;</span>
+    <span class="n">lrs&#39;&#39;</span> <span class="ow">=</span> <span class="n">last</span> <span class="n">lrss&#39;</span>
+    <span class="n">rls&#39;&#39;</span> <span class="ow">=</span> <span class="n">head</span> <span class="n">rlss&#39;</span>
+
+    <span class="c1">-- From `Vec m (Signal dom a)` to `Signal dom (Vec m a)`:</span>
+    <span class="p">(</span><span class="n">lrs&#39;&#39;&#39;</span><span class="p">,</span> <span class="n">rls&#39;&#39;&#39;</span><span class="p">,</span> <span class="n">tbs&#39;&#39;&#39;</span><span class="p">,</span> <span class="n">bts&#39;&#39;&#39;</span><span class="p">)</span> <span class="ow">=</span>
+      <span class="p">(</span><span class="n">bundle</span> <span class="n">lrs&#39;&#39;</span><span class="p">,</span> <span class="n">bundle</span> <span class="n">rls&#39;&#39;</span><span class="p">,</span> <span class="n">bundle</span> <span class="n">tbs&#39;&#39;</span><span class="p">,</span> <span class="n">bundle</span> <span class="n">bts&#39;&#39;</span><span class="p">)</span>
+</code></pre></div>
+
+
+<p>And that&rsquo;s it for actually tying the processing elements together in a grid. This doesn&rsquo;t quite correspond to the examples shown at the very beginning of this blogpost, the grid is now a continuous circuit. That is, data flows from the sides of the systolic array all through it in a single clock cycle. All outputs need to be delayed a single clock cycle, as such:</p>
+
+<p><center><img style="min-width:25%" src="/blog/0002-systolic-arrays/LinearPEReg.svg"></img></center></p>
+
+<p>By simply using <a href="http://hackage.haskell.org/package/clash-prelude-0.99.3/docs/Clash-Signal.html#v:register">register</a> we can delay its output by one:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">delayPelem</span> <span class="n">pelem</span> <span class="n">lrdflt</span> <span class="n">rldflt</span> <span class="n">tbdflt</span> <span class="n">btdflt</span> <span class="n">input</span> <span class="ow">=</span>
+  <span class="n">register</span> <span class="p">(</span><span class="n">lrdflt</span><span class="p">,</span> <span class="n">rldflt</span><span class="p">,</span> <span class="n">tbdflt</span><span class="p">,</span> <span class="n">btdflt</span><span class="p">)</span> <span class="p">(</span><span class="n">pelem</span> <span class="n">input</span><span class="p">)</span>
+</code></pre></div>
+
+
+<p>We&rsquo;d need to make a small adjustment to <code>systolicArray2D</code> to take element defaults, but that&rsquo;s it. We&rsquo;ve built the systolic array corresponding to the very first interactive example given in this blogpost.</p>
+
+<h1 id="delayed-systolic-array">Delayed systolic array</h1>
+
+<p>Lots of applications, including matrix multiplication, have some need to delay their inputs in such a way that the right elements &ldquo;meet&rdquo; each other at the same time. Similarly, the outputs need to be delayed strategically such that results belonging to the same entity (for example, a row in a result matrix) arrive synchronously. When data flows left to right and top to bottom, the most natural delay strategy is such that the n<sup>th</sup> element of the n<sup>th</sup> input from the left, arrives at the same time as the n<sup>th</sup> element of the n<sup>th</sup> input from the top. Visually, this equals the second example (repeated here):</p>
+
+<p><div class="sysarray" id="mm1-rep">
+    <center>
+        <table></table>
+        <button class="next">Next</button>
+        <button class="reset">Reset</button>
+    </center>
+</div>
+<br/></p>
+
+<p>The example suggests the first left-input is delayed by zero, the second by one, etc. For outputs it would make sense to be delayed the other way around. The exact configuration depends on the application and whether paths are used to push results out of the array, or flow data into it. For now, we&rsquo;ll assume the simple case where all inputs are delayed as described, and all outputs are delayed the other way around.</p>
+
+<p>At the moment, Clash does not have a function to delay a signal a number of times, so we need to build one ourselves. A quick solution is to fold over a vector of units, while adding a register at each step. Clash will filter empty types, so this actually won&rsquo;t interfere with our HDL output at all.</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="c1">-- | Put /n/ registers after given signal.</span>
+<span class="nf">delayN</span>
+  <span class="ow">::</span> <span class="n">forall</span> <span class="n">n</span> <span class="n">dom</span> <span class="n">gated</span> <span class="n">synchronous</span> <span class="n">a</span>
+   <span class="o">.</span> <span class="kt">HiddenClockReset</span> <span class="n">dom</span> <span class="n">gated</span> <span class="n">synchronous</span>
+  <span class="ow">=&gt;</span> <span class="n">a</span>
+  <span class="c1">-- ^ Default value register</span>
+  <span class="ow">-&gt;</span> <span class="kt">SNat</span> <span class="n">n</span>
+  <span class="c1">-- ^ Number of registers to insert</span>
+  <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="n">a</span>
+  <span class="c1">-- ^ Signal to delay</span>
+  <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="n">a</span>
+  <span class="c1">-- ^ Delayed signal</span>
+<span class="nf">delayN</span> <span class="n">dflt</span> <span class="n">n</span><span class="o">@</span><span class="kt">SNat</span> <span class="n">signal</span> <span class="ow">=</span>
+  <span class="n">foldl</span> <span class="p">(</span><span class="nf">\</span><span class="n">s</span> <span class="kr">_</span> <span class="ow">-&gt;</span> <span class="n">register</span> <span class="n">dflt</span> <span class="n">s</span><span class="p">)</span> <span class="n">signal</span> <span class="p">(</span><span class="n">replicate</span> <span class="n">n</span> <span class="nb">()</span><span class="p">)</span>
+</code></pre></div>
+
+
+<p>Delaying the signals is fairly easy with <a href="https://hackage.haskell.org/package/clash-prelude-0.99/docs/Clash-Sized-Vector.html#v:smap">smap</a>. Most of the code is related to packing/unpacking signals so they can be mapped over (&ldquo;type torturing&rdquo; 🙂):</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">systolicArray2Dd</span> <span class="n">lr</span> <span class="n">rl</span> <span class="n">tb</span> <span class="n">bt</span> <span class="n">pelem</span> <span class="n">lrs</span> <span class="n">rls</span> <span class="n">tbs</span> <span class="n">bts</span> <span class="ow">=</span> <span class="p">(</span><span class="n">lrs&#39;&#39;&#39;</span><span class="p">,</span> <span class="n">rls&#39;&#39;&#39;</span><span class="p">,</span> <span class="n">tbs&#39;&#39;&#39;</span><span class="p">,</span> <span class="n">bts&#39;&#39;&#39;</span><span class="p">)</span>
+  <span class="kr">where</span>
+    <span class="c1">-- Append delays to array inputs</span>
+    <span class="n">lrs&#39;</span> <span class="ow">=</span> <span class="n">bundle</span> <span class="p">(</span><span class="n">smap</span> <span class="p">(</span><span class="n">delayN</span> <span class="n">lr</span><span class="p">)</span> <span class="p">(</span><span class="n">unbundle</span> <span class="n">lrs</span><span class="p">))</span>
+    <span class="n">rls&#39;</span> <span class="ow">=</span> <span class="n">bundle</span> <span class="p">(</span><span class="n">smap</span> <span class="p">(</span><span class="n">delayN</span> <span class="n">rl</span><span class="p">)</span> <span class="p">(</span><span class="n">unbundle</span> <span class="n">rls</span><span class="p">))</span>
+    <span class="n">tbs&#39;</span> <span class="ow">=</span> <span class="n">bundle</span> <span class="p">(</span><span class="n">smap</span> <span class="p">(</span><span class="n">delayN</span> <span class="n">tb</span><span class="p">)</span> <span class="p">(</span><span class="n">unbundle</span> <span class="n">tbs</span><span class="p">))</span>
+    <span class="n">bts&#39;</span> <span class="ow">=</span> <span class="n">bundle</span> <span class="p">(</span><span class="n">smap</span> <span class="p">(</span><span class="n">delayN</span> <span class="n">bt</span><span class="p">)</span> <span class="p">(</span><span class="n">unbundle</span> <span class="n">bts</span><span class="p">))</span>
+
+    <span class="c1">-- Create systolic array without delays of outputs</span>
+    <span class="p">(</span><span class="n">lrs&#39;&#39;</span><span class="p">,</span> <span class="n">rls&#39;&#39;</span><span class="p">,</span> <span class="n">tbs&#39;&#39;</span><span class="p">,</span> <span class="n">bts&#39;&#39;</span><span class="p">)</span> <span class="ow">=</span>
+      <span class="n">systolicArray2D</span> <span class="n">lr</span> <span class="n">rl</span> <span class="n">tb</span> <span class="n">bt</span> <span class="n">pelem</span> <span class="n">lrs&#39;</span> <span class="n">rls&#39;</span> <span class="n">tbs&#39;</span> <span class="n">bts&#39;</span>
+
+    <span class="c1">-- Append delays to array outputs</span>
+    <span class="n">lrs&#39;&#39;&#39;</span> <span class="ow">=</span> <span class="n">bundle</span> <span class="o">$</span> <span class="n">reverse</span> <span class="o">$</span> <span class="n">smap</span> <span class="p">(</span><span class="n">delayN</span> <span class="n">lr</span><span class="p">)</span> <span class="p">(</span><span class="n">reverse</span> <span class="o">$</span> <span class="n">unbundle</span> <span class="n">lrs&#39;&#39;</span><span class="p">)</span>
+    <span class="n">rls&#39;&#39;&#39;</span> <span class="ow">=</span> <span class="n">bundle</span> <span class="o">$</span> <span class="n">reverse</span> <span class="o">$</span> <span class="n">smap</span> <span class="p">(</span><span class="n">delayN</span> <span class="n">rl</span><span class="p">)</span> <span class="p">(</span><span class="n">reverse</span> <span class="o">$</span> <span class="n">unbundle</span> <span class="n">rls&#39;&#39;</span><span class="p">)</span>
+    <span class="n">tbs&#39;&#39;&#39;</span> <span class="ow">=</span> <span class="n">bundle</span> <span class="o">$</span> <span class="n">reverse</span> <span class="o">$</span> <span class="n">smap</span> <span class="p">(</span><span class="n">delayN</span> <span class="n">tb</span><span class="p">)</span> <span class="p">(</span><span class="n">reverse</span> <span class="o">$</span> <span class="n">unbundle</span> <span class="n">tbs&#39;&#39;</span><span class="p">)</span>
+    <span class="n">bts&#39;&#39;&#39;</span> <span class="ow">=</span> <span class="n">bundle</span> <span class="o">$</span> <span class="n">reverse</span> <span class="o">$</span> <span class="n">smap</span> <span class="p">(</span><span class="n">delayN</span> <span class="n">bt</span><span class="p">)</span> <span class="p">(</span><span class="n">reverse</span> <span class="o">$</span> <span class="n">unbundle</span> <span class="n">bts&#39;&#39;</span><span class="p">)</span>
+</code></pre></div>
+
+
+<p>And that&rsquo;s all there is to it.</p>
+
+<h1 id="matrix-multiplication">Matrix multiplication</h1>
+
+<p>So far we&rsquo;ve built a generic systolic array and a delayed one on top of it. We haven&rsquo;t built anything useful yet though, which is what this section is for. We&rsquo;ve selected a few amongst the most commonly used. Even with a rigid structures such systolic arrays, many design choices still exist. The implemented algorithms are therefore by no means meant as perfect solutions. This subsection will deal with matrix multiplication.</p>
+
+<p><center><img style="min-width:40%" src="/blog/0002-systolic-arrays/MM.svg"></img></center></p>
+
+<p>To test and communicate various communication strategies, we&rsquo;ll use spacetime diagrams. On the vertical axis there&rsquo;s space: the processing elements. On the horizontal axis there&rsquo;s time. We&rsquo;ll only consider the case where processing elements can communicate in one dimension: either left-right or top-bottom. If they communicate left-right, the processing elements represent a row in the systolic array, if they communicate top-down, the processing elements represent a column in the systolic array. It actually doesn&rsquo;t really matter, so to ease talking about this problem let&rsquo;s assume the communicate top-bottom. A <span style="background-color:#66CC00; color:white;">green</span> background represents every moment in time a specific element produces useful data:</p>
+
+<table cellspacing="0" border="0">
+    <colgroup width="34"></colgroup>
+    <colgroup width="23" span="10"></colgroup>
+    <colgroup width="26" span="5"></colgroup>
+    <tbody><tr>
+        <td height="21" align="left"><b>c \ t</b></td>
+        <td sdval="0" sdnum="1043;" align="center"><b>0</b></td>
+        <td sdval="1" sdnum="1043;" align="center"><b>1</b></td>
+        <td sdval="2" sdnum="1043;" align="center"><b>2</b></td>
+        <td sdval="3" sdnum="1043;" align="center"><b>3</b></td>
+        <td sdval="4" sdnum="1043;" align="center"><b>4</b></td>
+        <td sdval="5" sdnum="1043;" align="center"><b>5</b></td>
+        <td sdval="6" sdnum="1043;" align="center"><b>6</b></td>
+        <td sdval="7" sdnum="1043;" align="center"><b>7</b></td>
+        <td sdval="8" sdnum="1043;" align="center"><b>8</b></td>
+        <td sdval="9" sdnum="1043;" align="center"><b>9</b></td>
+        <td sdval="10" sdnum="1043;" align="center"><b>10</b></td>
+        <td sdval="11" sdnum="1043;" align="center"><b>11</b></td>
+        <td sdval="12" sdnum="1043;" align="center"><b>12</b></td>
+        <td sdval="13" sdnum="1043;" align="center"><b>13</b></td>
+        <td sdval="14" sdnum="1043;" align="center"><b>14</b></td>
+    </tr>
+    <tr>
+        <td height="17" align="left"><b>pe1</b></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r1</font></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r1</font></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r1</font></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+    </tr>
+    <tr>
+        <td height="17" align="left"><b>pe2</b></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r2</font></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r2</font></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r2</font></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+    </tr>
+    <tr>
+        <td height="17" align="left"><b>pe3</b></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r3</font></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r3</font></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r3</font></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+    </tr>
+    <tr>
+        <td height="17" align="left"><b>pe4</b></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r4</font></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r4</font></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r4</font></td>
+        <td align="center"><br></td>
+    </tr>
+    <tr>
+        <td height="17" align="left"><b>pe5</b></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r5</font></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r5</font></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r5</font></td>
+    </tr>
+</tbody></table>
+
+<p>Empty cells will be used to indicate where some piece of data resides. We&rsquo;ll see an example in the next section.</p>
+
+<h2 id="general-matrix-multiplication">General matrix multiplication</h2>
+
+<p>Matrix multiplication can implemented by having each processing element multiply both its input signals, accumulating, and pushing its data out periodically as shown in the first part of this blogpost. The period at which processing elements need to push out data depends on <code>n</code>, the number of columns in the left matrix and the number of rows in the right. Visually:</p>
+
+<p><center><img style="min-width:70%" src="/blog/0002-systolic-arrays/Dimensions.svg"></img></center></p>
+
+<p>Assuming that each cell communicates its result downwards and each cell can only push a single element, we need a number of flush rounds if <code>m</code> exceeds <code>n</code>. After all, the bandwidth of the outer processing element to its environment is a single element per cycle. Thus, more than one result per cycle per column exceeds that bandwidth. If <code>n</code> exceeds <code>m</code> no flush rounds are needed, but the systolic array produces &ldquo;garbage&rdquo; values some of the time as the bandwidth exceeds the result production.</p>
+
+<p>For now, let&rsquo;s assume <code>n = m</code>. Communication downwards effectively binds the systolic array to communicate as follows:</p>
+
+<table cellspacing="0" border="0">
+    <colgroup width="33" span="16"></colgroup>
+    <tbody><tr>
+        <td height="20" align="left"><b>c \ t</b></td>
+        <td sdval="0" sdnum="1043;" align="center"><b>0</b></td>
+        <td sdval="1" sdnum="1043;" align="center"><b>1</b></td>
+        <td sdval="2" sdnum="1043;" align="center"><b>2</b></td>
+        <td sdval="3" sdnum="1043;" align="center"><b>3</b></td>
+        <td sdval="4" sdnum="1043;" align="center"><b>4</b></td>
+        <td sdval="5" sdnum="1043;" align="center"><b>5</b></td>
+        <td sdval="6" sdnum="1043;" align="center"><b>6</b></td>
+        <td sdval="7" sdnum="1043;" align="center"><b>7</b></td>
+        <td sdval="8" sdnum="1043;" align="center"><b>8</b></td>
+        <td sdval="9" sdnum="1043;" align="center"><b>9</b></td>
+        <td sdval="10" sdnum="1043;" align="center"><b>10</b></td>
+        <td sdval="11" sdnum="1043;" align="center"><b>11</b></td>
+        <td sdval="12" sdnum="1043;" align="center"><b>12</b></td>
+        <td sdval="13" sdnum="1043;" align="center"><b>13</b></td>
+        <td sdval="14" sdnum="1043;" align="center"><b>14</b></td>
+    </tr>
+    <tr>
+        <td height="17" align="left"><b>pe1</b></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r1</font></td>
+        <td align="center"><font color="#CCCCCC">r1</font></td>
+        <td align="center"><font color="#CCCCCC">r1</font></td>
+        <td align="center"><font color="#CCCCCC">r1</font></td>
+        <td align="center">r1</td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r1</font></td>
+        <td align="center"><font color="#CCCCCC">r1</font></td>
+        <td align="center"><font color="#CCCCCC">r1</font></td>
+        <td align="center"><font color="#CCCCCC">r1</font></td>
+        <td align="center">r1</td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r1</font></td>
+        <td align="center"><font color="#CCCCCC">r1</font></td>
+        <td align="center"><font color="#CCCCCC">r1</font></td>
+        <td align="center"><font color="#CCCCCC">r1</font></td>
+        <td align="center">r1</td>
+    </tr>
+    <tr>
+        <td height="17" align="left"><b>pe2</b></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r2</font></td>
+        <td align="center"><font color="#CCCCCC">r2</font></td>
+        <td align="center"><font color="#CCCCCC">r2</font></td>
+        <td align="center">r2</td>
+        <td align="center">r1</td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r2</font></td>
+        <td align="center"><font color="#CCCCCC">r2</font></td>
+        <td align="center"><font color="#CCCCCC">r2</font></td>
+        <td align="center">r2</td>
+        <td align="center">r1</td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r2</font></td>
+        <td align="center"><font color="#CCCCCC">r2</font></td>
+        <td align="center"><font color="#CCCCCC">r2</font></td>
+        <td align="center">r2</td>
+    </tr>
+    <tr>
+        <td height="17" align="left"><b>pe3</b></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r3</font></td>
+        <td align="center"><font color="#CCCCCC">r3</font></td>
+        <td align="center">r3</td>
+        <td align="center">r2</td>
+        <td align="center">r1</td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r3</font></td>
+        <td align="center"><font color="#CCCCCC">r3</font></td>
+        <td align="center">r3</td>
+        <td align="center">r2</td>
+        <td align="center">r1</td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r3</font></td>
+        <td align="center"><font color="#CCCCCC">r3</font></td>
+        <td align="center">r3</td>
+    </tr>
+    <tr>
+        <td height="17" align="left"><b>pe4</b></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r4</font></td>
+        <td align="center">r4</td>
+        <td align="center">r3</td>
+        <td align="center">r2</td>
+        <td align="center">r1</td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r4</font></td>
+        <td align="center">r4</td>
+        <td align="center">r3</td>
+        <td align="center">r2</td>
+        <td align="center">r1</td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r4</font></td>
+        <td align="center">r4</td>
+    </tr>
+    <tr>
+        <td height="17" align="left"><b>pe5</b></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r5</font></td>
+        <td align="center">r4</td>
+        <td align="center">r3</td>
+        <td align="center">r2</td>
+        <td align="center">r1</td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r5</font></td>
+        <td align="center">r4</td>
+        <td align="center">r3</td>
+        <td align="center">r2</td>
+        <td align="center">r1</td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r5</font></td>
+    </tr>
+</tbody></table>
+
+<p>Elements need to store their results for a while, before synchronously passing them to their neighbors. In the diagram, the moments where each element pushes its own result is <code>t=4</code>, <code>t=9</code>, and <code>t=14</code>. At all other cycles, processing elements simply pass the results they receive from their upper neighbors down. Because processing elements need to synchronously push their data, this either requires:</p>
+
+<ol>
+<li>a signal from the left telling if <code>t=5n - 1</code>; or</li>
+<li>each element keeping a local counter counting the global time; or</li>
+<li>each element keeping a local counter counting last time since fire; or</li>
+</ol>
+
+<p>The last two waste hardware. The first one requires a split between timing strategies for data and control. That does requires a combination of <code>systolicArray2D</code> and <code>systolicArray2Dd</code>, but that&rsquo;s easy enough - though tedious - to implement:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">systolicArray2Dud</span>
+  <span class="n">lr</span><span class="o">@</span><span class="p">(</span><span class="n">lru</span><span class="p">,</span> <span class="n">lrd</span><span class="p">)</span>
+  <span class="n">rl</span><span class="o">@</span><span class="p">(</span><span class="n">rlu</span><span class="p">,</span> <span class="n">rld</span><span class="p">)</span>
+  <span class="n">tb</span><span class="o">@</span><span class="p">(</span><span class="n">tbu</span><span class="p">,</span> <span class="n">tbd</span><span class="p">)</span>
+  <span class="n">bt</span><span class="o">@</span><span class="p">(</span><span class="n">btu</span><span class="p">,</span> <span class="n">btd</span><span class="p">)</span>
+  <span class="n">pelem</span>
+  <span class="n">lrus</span> <span class="n">lrds</span>
+  <span class="n">rlus</span> <span class="n">rlds</span>
+  <span class="n">tbus</span> <span class="n">tbds</span>
+  <span class="n">btus</span> <span class="n">btds</span> <span class="ow">=</span>
+  <span class="p">(</span><span class="n">lrus&#39;</span><span class="p">,</span> <span class="n">lrds&#39;&#39;&#39;</span><span class="p">,</span> <span class="n">rlus&#39;</span><span class="p">,</span> <span class="n">rlds&#39;&#39;&#39;</span><span class="p">,</span> <span class="n">tbus&#39;</span><span class="p">,</span> <span class="n">tbds&#39;&#39;&#39;</span><span class="p">,</span> <span class="n">btus&#39;</span><span class="p">,</span> <span class="n">btds&#39;&#39;&#39;</span><span class="p">)</span>
+  <span class="kr">where</span>
+    <span class="c1">-- Append delays to array inputs</span>
+    <span class="n">lrds&#39;</span> <span class="ow">=</span> <span class="n">bundle</span> <span class="p">(</span><span class="n">smap</span> <span class="p">(</span><span class="n">delayN</span> <span class="n">lrd</span><span class="p">)</span> <span class="p">(</span><span class="n">unbundle</span> <span class="n">lrds</span><span class="p">))</span>
+    <span class="n">rlds&#39;</span> <span class="ow">=</span> <span class="n">bundle</span> <span class="p">(</span><span class="n">smap</span> <span class="p">(</span><span class="n">delayN</span> <span class="n">rld</span><span class="p">)</span> <span class="p">(</span><span class="n">unbundle</span> <span class="n">rlds</span><span class="p">))</span>
+    <span class="n">tbds&#39;</span> <span class="ow">=</span> <span class="n">bundle</span> <span class="p">(</span><span class="n">smap</span> <span class="p">(</span><span class="n">delayN</span> <span class="n">tbd</span><span class="p">)</span> <span class="p">(</span><span class="n">unbundle</span> <span class="n">tbds</span><span class="p">))</span>
+    <span class="n">btds&#39;</span> <span class="ow">=</span> <span class="n">bundle</span> <span class="p">(</span><span class="n">smap</span> <span class="p">(</span><span class="n">delayN</span> <span class="n">btd</span><span class="p">)</span> <span class="p">(</span><span class="n">unbundle</span> <span class="n">btds</span><span class="p">))</span>
+
+    <span class="c1">-- Bundle delayed and undelayed signals</span>
+    <span class="n">lrs</span> <span class="ow">=</span> <span class="n">zipWith</span> <span class="p">(,)</span> <span class="o">&lt;$&gt;</span> <span class="n">lrus</span> <span class="o">&lt;*&gt;</span> <span class="n">lrds&#39;</span>
+    <span class="n">rls</span> <span class="ow">=</span> <span class="n">zipWith</span> <span class="p">(,)</span> <span class="o">&lt;$&gt;</span> <span class="n">rlus</span> <span class="o">&lt;*&gt;</span> <span class="n">rlds&#39;</span>
+    <span class="n">tbs</span> <span class="ow">=</span> <span class="n">zipWith</span> <span class="p">(,)</span> <span class="o">&lt;$&gt;</span> <span class="n">tbus</span> <span class="o">&lt;*&gt;</span> <span class="n">tbds&#39;</span>
+    <span class="n">bts</span> <span class="ow">=</span> <span class="n">zipWith</span> <span class="p">(,)</span> <span class="o">&lt;$&gt;</span> <span class="n">btus</span> <span class="o">&lt;*&gt;</span> <span class="n">btds&#39;</span>
+
+    <span class="c1">-- Create systolic array without delays of outputs</span>
+    <span class="p">(</span><span class="n">lrs&#39;</span><span class="p">,</span> <span class="n">rls&#39;</span><span class="p">,</span> <span class="n">tbs&#39;</span><span class="p">,</span> <span class="n">bts&#39;</span><span class="p">)</span> <span class="ow">=</span>
+      <span class="n">systolicArray2D</span> <span class="n">lr</span> <span class="n">rl</span> <span class="n">tb</span> <span class="n">bt</span> <span class="n">pelem</span> <span class="n">lrs</span> <span class="n">rls</span> <span class="n">tbs</span> <span class="n">bts</span>
+
+    <span class="c1">-- Unbundle delayed and undelayed signals</span>
+    <span class="p">(</span><span class="n">lrus&#39;</span><span class="p">,</span> <span class="n">lrds&#39;&#39;</span><span class="p">)</span> <span class="ow">=</span> <span class="p">(</span><span class="n">fmap</span> <span class="n">fst</span> <span class="o">&lt;$&gt;</span> <span class="n">lrs&#39;</span><span class="p">,</span> <span class="n">fmap</span> <span class="n">snd</span> <span class="o">&lt;$&gt;</span> <span class="n">lrs&#39;</span><span class="p">)</span>
+    <span class="p">(</span><span class="n">rlus&#39;</span><span class="p">,</span> <span class="n">rlds&#39;&#39;</span><span class="p">)</span> <span class="ow">=</span> <span class="p">(</span><span class="n">fmap</span> <span class="n">fst</span> <span class="o">&lt;$&gt;</span> <span class="n">rls&#39;</span><span class="p">,</span> <span class="n">fmap</span> <span class="n">snd</span> <span class="o">&lt;$&gt;</span> <span class="n">rls&#39;</span><span class="p">)</span>
+    <span class="p">(</span><span class="n">tbus&#39;</span><span class="p">,</span> <span class="n">tbds&#39;&#39;</span><span class="p">)</span> <span class="ow">=</span> <span class="p">(</span><span class="n">fmap</span> <span class="n">fst</span> <span class="o">&lt;$&gt;</span> <span class="n">tbs&#39;</span><span class="p">,</span> <span class="n">fmap</span> <span class="n">snd</span> <span class="o">&lt;$&gt;</span> <span class="n">tbs&#39;</span><span class="p">)</span>
+    <span class="p">(</span><span class="n">btus&#39;</span><span class="p">,</span> <span class="n">btds&#39;&#39;</span><span class="p">)</span> <span class="ow">=</span> <span class="p">(</span><span class="n">fmap</span> <span class="n">fst</span> <span class="o">&lt;$&gt;</span> <span class="n">bts&#39;</span><span class="p">,</span> <span class="n">fmap</span> <span class="n">snd</span> <span class="o">&lt;$&gt;</span> <span class="n">bts&#39;</span><span class="p">)</span>
+
+    <span class="c1">-- Append delays to array outputs</span>
+    <span class="n">lrds&#39;&#39;&#39;</span> <span class="ow">=</span> <span class="n">bundle</span> <span class="o">$</span> <span class="n">reverse</span> <span class="o">$</span> <span class="n">smap</span> <span class="p">(</span><span class="n">delayN</span> <span class="n">lrd</span><span class="p">)</span> <span class="p">(</span><span class="n">reverse</span> <span class="o">$</span> <span class="n">unbundle</span> <span class="n">lrds&#39;&#39;</span><span class="p">)</span>
+    <span class="n">rlds&#39;&#39;&#39;</span> <span class="ow">=</span> <span class="n">bundle</span> <span class="o">$</span> <span class="n">reverse</span> <span class="o">$</span> <span class="n">smap</span> <span class="p">(</span><span class="n">delayN</span> <span class="n">rld</span><span class="p">)</span> <span class="p">(</span><span class="n">reverse</span> <span class="o">$</span> <span class="n">unbundle</span> <span class="n">rlds&#39;&#39;</span><span class="p">)</span>
+    <span class="n">tbds&#39;&#39;&#39;</span> <span class="ow">=</span> <span class="n">bundle</span> <span class="o">$</span> <span class="n">reverse</span> <span class="o">$</span> <span class="n">smap</span> <span class="p">(</span><span class="n">delayN</span> <span class="n">tbd</span><span class="p">)</span> <span class="p">(</span><span class="n">reverse</span> <span class="o">$</span> <span class="n">unbundle</span> <span class="n">tbds&#39;&#39;</span><span class="p">)</span>
+    <span class="n">btds&#39;&#39;&#39;</span> <span class="ow">=</span> <span class="n">bundle</span> <span class="o">$</span> <span class="n">reverse</span> <span class="o">$</span> <span class="n">smap</span> <span class="p">(</span><span class="n">delayN</span> <span class="n">btd</span><span class="p">)</span> <span class="p">(</span><span class="n">reverse</span> <span class="o">$</span> <span class="n">unbundle</span> <span class="n">btds&#39;&#39;</span><span class="p">)</span>
+</code></pre></div>
+
+
+<p>Note that the only difference between <code>systolicArray2Dud</code> and <code>systolicArray2Dd</code> is that we pass in tuples of which the first element is passed undelayed to the matrix, while the second is delayed according to earlier discussed strategies. Each processing element needs to support the actions discussed just now:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="kr">data</span> <span class="kt">SyncInstrPEDown</span>
+  <span class="ow">=</span> <span class="kt">Pass</span>
+  <span class="c1">-- ^ Take data from upper neighbor, pass to lower neighbor</span>
+  <span class="o">|</span> <span class="kt">Inject</span>
+  <span class="c1">-- ^ Discard data from upper neighbor, pass own storage to lower neighbor</span>
+
+<span class="kr">data</span> <span class="kt">AsyncInstrPEDown</span>
+  <span class="ow">=</span> <span class="kt">Accum</span>
+  <span class="c1">-- ^ Accumulate products of incoming signals</span>
+  <span class="o">|</span> <span class="kt">Store</span>
+  <span class="c1">-- ^ Move current result to storage</span>
+</code></pre></div>
+
+
+<p>The process element then keeps two buffers: one to store an accumulation (<code>s1</code>), and one to store a result (<code>s2</code>). Processing elements are exactly the same everywhere and simply listen for incoming instructions as defined earlier.</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">pelemDown</span> <span class="p">((</span><span class="n">m</span><span class="p">,</span> <span class="n">n</span><span class="p">),</span> <span class="n">lrs</span><span class="p">,</span> <span class="n">rls</span><span class="p">,</span> <span class="n">tbs</span><span class="p">,</span> <span class="n">bts</span><span class="p">)</span> <span class="ow">=</span> <span class="p">(</span><span class="n">lrs</span><span class="p">,</span> <span class="n">rls</span><span class="p">,</span> <span class="n">tbs&#39;&#39;</span><span class="p">,</span> <span class="n">bts</span><span class="p">)</span>
+  <span class="kr">where</span>
+    <span class="n">tbs&#39;</span>  <span class="ow">=</span> <span class="n">mealy</span> <span class="n">pelem&#39;</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">$</span> <span class="n">bundle</span> <span class="p">(</span><span class="n">lrs</span><span class="p">,</span> <span class="n">snd</span> <span class="o">&lt;$&gt;</span> <span class="n">tbs</span><span class="p">)</span>
+    <span class="n">tbs&#39;&#39;</span> <span class="ow">=</span> <span class="n">liftA2</span> <span class="p">(,)</span> <span class="p">(</span><span class="n">fst</span> <span class="o">&lt;$&gt;</span> <span class="n">tbs</span><span class="p">)</span> <span class="n">tbs&#39;</span>
+
+    <span class="n">pelem&#39;</span> <span class="p">(</span><span class="n">s1</span><span class="p">,</span> <span class="n">s2</span><span class="p">)</span>  <span class="p">((</span><span class="kt">Pass</span><span class="p">,</span>   <span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="kt">Accum</span><span class="p">)),</span> <span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">res</span><span class="p">))</span>  <span class="ow">=</span> <span class="p">((</span><span class="n">s1</span><span class="o">+</span><span class="n">a</span><span class="o">*</span><span class="n">b</span><span class="p">,</span> <span class="n">s2</span>    <span class="p">),</span>  <span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">res</span><span class="p">))</span>
+    <span class="n">pelem&#39;</span> <span class="p">(</span><span class="n">s1</span><span class="p">,</span> <span class="n">_s2</span><span class="p">)</span> <span class="p">((</span><span class="kt">Pass</span><span class="p">,</span>   <span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="kt">Store</span><span class="p">)),</span> <span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">res</span><span class="p">))</span>  <span class="ow">=</span> <span class="p">((</span><span class="mi">0</span><span class="p">,</span>      <span class="n">s1</span><span class="o">+</span><span class="n">a</span><span class="o">*</span><span class="n">b</span><span class="p">),</span>  <span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">res</span><span class="p">))</span>
+    <span class="n">pelem&#39;</span> <span class="p">(</span><span class="n">s1</span><span class="p">,</span> <span class="n">s2</span><span class="p">)</span>  <span class="p">((</span><span class="kt">Inject</span><span class="p">,</span> <span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="kt">Accum</span><span class="p">)),</span> <span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">_res</span><span class="p">))</span> <span class="ow">=</span> <span class="p">((</span><span class="n">s1</span><span class="o">+</span><span class="n">a</span><span class="o">*</span><span class="n">b</span><span class="p">,</span> <span class="n">s2</span>    <span class="p">),</span>  <span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">s2</span><span class="p">))</span>
+    <span class="n">pelem&#39;</span> <span class="p">(</span><span class="n">s1</span><span class="p">,</span> <span class="n">s2</span><span class="p">)</span>  <span class="p">((</span><span class="kt">Inject</span><span class="p">,</span> <span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="kt">Store</span><span class="p">)),</span> <span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">res</span><span class="p">))</span>  <span class="ow">=</span> <span class="p">((</span><span class="mi">0</span><span class="p">,</span>      <span class="n">s1</span><span class="o">+</span><span class="n">a</span><span class="o">*</span><span class="n">b</span><span class="p">),</span>  <span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">s2</span><span class="p">))</span>
+</code></pre></div>
+
+
+<p>A wrapping function ties the systolic array and processing element functions.</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">generalMatrixMultiplicationDown</span>
+  <span class="ow">::</span> <span class="n">forall</span> <span class="n">a</span> <span class="n">n</span> <span class="n">m</span> <span class="n">p</span> <span class="n">dom</span> <span class="n">gated</span> <span class="n">synchronous</span>
+   <span class="o">.</span> <span class="kt">HiddenClockReset</span> <span class="n">dom</span> <span class="n">gated</span> <span class="n">synchronous</span>
+  <span class="ow">=&gt;</span> <span class="kt">Num</span> <span class="n">a</span>
+  <span class="ow">=&gt;</span> <span class="kt">Show</span> <span class="n">a</span>
+  <span class="ow">=&gt;</span> <span class="kt">NFData</span> <span class="n">a</span>
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">m</span>
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">p</span>
+  <span class="ow">=&gt;</span> <span class="kt">SNat</span> <span class="p">(</span><span class="n">n</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+  <span class="c1">-- ^ Number of columns / rows of left matrix / right matrix</span>
+  <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="p">(</span><span class="kt">Vec</span> <span class="p">(</span><span class="n">m</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="n">a</span><span class="p">)</span>
+  <span class="c1">-- ^ Columns of left matrix</span>
+  <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="p">(</span><span class="kt">Vec</span> <span class="p">(</span><span class="n">p</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="n">a</span><span class="p">)</span>
+  <span class="c1">-- ^ Rows of right matrix</span>
+  <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="p">(</span><span class="kt">Vec</span> <span class="p">(</span><span class="n">p</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="n">a</span><span class="p">)</span>
+  <span class="c1">-- ^ Rows of result matrix, in reverse order</span>
+<span class="nf">generalMatrixMultiplicationDown</span> <span class="n">n</span><span class="o">@</span><span class="kt">SNat</span> <span class="n">cols</span> <span class="n">rows</span> <span class="ow">=</span> <span class="n">fmap</span> <span class="n">snd</span> <span class="o">&lt;$&gt;</span> <span class="n">tbs&#39;</span>
+  <span class="kr">where</span>
+    <span class="c1">-- Determine inputs for systolic array:</span>
+    <span class="n">counter</span> <span class="ow">::</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="p">(</span><span class="kt">Index</span> <span class="p">(</span><span class="n">n</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="n">counter</span> <span class="ow">=</span> <span class="n">register</span> <span class="n">minBound</span> <span class="p">(</span><span class="n">satPlus</span> <span class="kt">SatWrap</span> <span class="mi">1</span> <span class="o">&lt;$&gt;</span> <span class="n">counter</span><span class="p">)</span>
+
+    <span class="n">sysCmd</span> <span class="n">n</span>
+      <span class="o">|</span> <span class="n">n</span> <span class="o">==</span> <span class="n">maxBound</span> <span class="ow">=</span> <span class="p">(</span><span class="n">repeat</span> <span class="kt">Inject</span><span class="p">,</span> <span class="n">repeat</span> <span class="kt">Store</span><span class="p">)</span>
+      <span class="o">|</span> <span class="n">otherwise</span>     <span class="ow">=</span> <span class="p">(</span><span class="n">repeat</span> <span class="kt">Pass</span><span class="p">,</span>   <span class="n">repeat</span> <span class="kt">Accum</span><span class="p">)</span>
+
+    <span class="p">(</span><span class="n">lrus</span><span class="p">,</span> <span class="n">dcmds</span><span class="p">)</span> <span class="ow">=</span> <span class="n">unbundle</span> <span class="p">(</span><span class="n">sysCmd</span> <span class="o">&lt;$&gt;</span> <span class="n">counter</span><span class="p">)</span>
+
+    <span class="c1">-- Pass columns and delayed commands from the left, and the rows and dummy</span>
+    <span class="c1">-- passthrough values from the top:</span>
+    <span class="n">lrds</span> <span class="ow">=</span> <span class="n">zip</span> <span class="o">&lt;$&gt;</span> <span class="n">cols</span> <span class="o">&lt;*&gt;</span> <span class="n">dcmds</span>
+    <span class="n">tbds</span> <span class="ow">=</span> <span class="n">zip</span> <span class="o">&lt;$&gt;</span> <span class="n">rows</span> <span class="o">&lt;*&gt;</span> <span class="n">pure</span> <span class="p">(</span><span class="n">repeat</span> <span class="mi">0</span><span class="p">)</span>
+
+    <span class="c1">-- nothingP and nothingM differ in vector length, thus having different</span>
+    <span class="c1">-- types, explaining the seemingly duplicate definitions:</span>
+    <span class="n">nothingP</span> <span class="ow">=</span> <span class="n">pure</span> <span class="o">$</span> <span class="n">repeat</span> <span class="nb">()</span>
+    <span class="n">nothingM</span> <span class="ow">=</span> <span class="n">pure</span> <span class="o">$</span> <span class="n">repeat</span> <span class="nb">()</span>
+
+    <span class="c1">-- Create actual array:</span>
+    <span class="p">(</span><span class="kr">_</span><span class="p">,</span> <span class="kr">_</span><span class="p">,</span> <span class="kr">_</span><span class="p">,</span> <span class="kr">_</span><span class="p">,</span> <span class="kr">_</span><span class="p">,</span> <span class="n">tbs&#39;</span><span class="p">,</span> <span class="kr">_</span><span class="p">,</span> <span class="kr">_</span><span class="p">)</span> <span class="ow">=</span>
+      <span class="n">systolicArray2Dud</span>
+        <span class="c1">-- Defaults for registers</span>
+        <span class="p">(</span><span class="kt">Inject</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="kt">Store</span><span class="p">))</span> <span class="p">(</span><span class="nb">()</span><span class="p">,</span> <span class="nb">()</span><span class="p">)</span> <span class="p">(</span><span class="nb">()</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span> <span class="p">(</span><span class="nb">()</span><span class="p">,</span> <span class="nb">()</span><span class="p">)</span>
+        <span class="c1">-- Processing element</span>
+        <span class="n">pelemDown</span>
+        <span class="c1">-- Inputs:</span>
+        <span class="n">lrus</span>     <span class="n">lrds</span>
+        <span class="n">nothingM</span> <span class="n">nothingM</span>
+        <span class="n">nothingP</span> <span class="n">tbds</span>
+        <span class="n">nothingP</span> <span class="n">nothingP</span>
+</code></pre></div>
+
+
+<p>Bandwidth requirements per node, where <code>|a|</code> is the number of bits needed to store numeric type <code>a</code>:</p>
+
+<ul>
+<li>Top-to-bottom: 2 &middot; <code>|a|</code></li>
+<li>Left-to-right: <code>|a|</code> + 1 + 1</li>
+</ul>
+
+<p>Registers needed systolic array:</p>
+
+<ul>
+<li>Top: 0.5 &middot; (p<sup>2</sup> - p) &middot; <code>|a|</code></li>
+<li>Left: 0.5 &middot; (m<sup>2</sup> - m) &middot; (<code>|a|</code> + 1)</li>
+<li>Bottom: 0.5 &middot; (p<sup>2</sup> - p) &middot; <code>|a|</code></li>
+<li>Nodes: 2pm &middot; <code>|a|</code></li>
+<li>Edges: 3pm &middot; (<code>|a|</code> + 1 + 1)</li>
+</ul>
+
+<p>The total latency from inputting the last row/column to receiving the last result row is <code>m</code>, the number of rows in the left matrix.</p>
+
+<h2 id="m-equals-n"><code>m</code> equals <code>n</code></h2>
+
+<p>The general matrix multiplication algorithm needs an extra register in each processing elements to temporarily store the results generated by each element, in order to transmit it to their bottom neighbors later. A simply alternative strategy would be to introduce flush rounds, where PEs end up being utilized 50% of the time - trading utilization for bandwidth.</p>
+
+<p>Square matrices turn out to have an interesting property which allows them to be calculated and read without introducing additional registers. By utilizing the bottom-to-top communication channel of our systolic array, processing elements can pass their results right after producing a meaningful result. The spacetime diagram then looks like:</p>
+
+<table cellspacing="0" border="0">
+    <colgroup width="34"></colgroup>
+    <colgroup width="23" span="10"></colgroup>
+    <colgroup width="26" span="5"></colgroup>
+    <tbody><tr>
+        <td height="21" align="left"><b>c \ t</b></td>
+        <td sdval="0" sdnum="1043;" align="center"><b>0</b></td>
+        <td sdval="1" sdnum="1043;" align="center"><b>1</b></td>
+        <td sdval="2" sdnum="1043;" align="center"><b>2</b></td>
+        <td sdval="3" sdnum="1043;" align="center"><b>3</b></td>
+        <td sdval="4" sdnum="1043;" align="center"><b>4</b></td>
+        <td sdval="5" sdnum="1043;" align="center"><b>5</b></td>
+        <td sdval="6" sdnum="1043;" align="center"><b>6</b></td>
+        <td sdval="7" sdnum="1043;" align="center"><b>7</b></td>
+        <td sdval="8" sdnum="1043;" align="center"><b>8</b></td>
+        <td sdval="9" sdnum="1043;" align="center"><b>9</b></td>
+        <td sdval="10" sdnum="1043;" align="center"><b>10</b></td>
+        <td sdval="11" sdnum="1043;" align="center"><b>11</b></td>
+        <td sdval="12" sdnum="1043;" align="center"><b>12</b></td>
+        <td sdval="13" sdnum="1043;" align="center"><b>13</b></td>
+        <td sdval="14" sdnum="1043;" align="center"><b>14</b></td>
+    </tr>
+    <tr>
+        <td height="17" align="left"><b>pe1</b></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r1</font></td>
+        <td align="center"><br></td>
+        <td align="center">r2</td>
+        <td align="center"><br></td>
+        <td align="center">r3</td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r1</font></td>
+        <td align="center">r4</td>
+        <td align="center">r2</td>
+        <td align="center">r5</td>
+        <td align="center">r3</td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r1</font></td>
+        <td align="center">r4</td>
+        <td align="center">r2</td>
+        <td align="center">r5</td>
+        <td align="center">r3</td>
+    </tr>
+    <tr>
+        <td height="17" align="left"><b>pe2</b></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r2</font></td>
+        <td align="center"><br></td>
+        <td align="center">r3</td>
+        <td align="center"><br></td>
+        <td align="center">r4</td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r2</font></td>
+        <td align="center">r5</td>
+        <td align="center">r3</td>
+        <td align="center"><br></td>
+        <td align="center">r4</td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r2</font></td>
+        <td align="center">r5</td>
+        <td align="center">r3</td>
+        <td align="center"><br></td>
+    </tr>
+    <tr>
+        <td height="17" align="left"><b>pe3</b></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r3</font></td>
+        <td align="center"><br></td>
+        <td align="center">r4</td>
+        <td align="center"><br></td>
+        <td align="center">r5</td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r3</font></td>
+        <td align="center"><br></td>
+        <td align="center">r4</td>
+        <td align="center"><br></td>
+        <td align="center">r5</td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r3</font></td>
+        <td align="center"><br></td>
+        <td align="center">r4</td>
+    </tr>
+    <tr>
+        <td height="17" align="left"><b>pe4</b></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r4</font></td>
+        <td align="center"><br></td>
+        <td align="center">r5</td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r4</font></td>
+        <td align="center"><br></td>
+        <td align="center">r5</td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r4</font></td>
+        <td align="center"><br></td>
+    </tr>
+    <tr>
+        <td height="17" align="left"><b>pe5</b></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r5</font></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r5</font></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td align="center"><br></td>
+        <td bgcolor="#66CC00" align="center"><font color="#EEEEEE">r5</font></td>
+    </tr>
+</tbody></table>
+
+<p>Compared to the previous communication strategy, no additional buffers are needed - but latency is up. Also note that this is only possible with square matrices where each side is are of odd size. Even matrices would need a single flush cycle. Due to the missing register, the implementation is much less complex. First, the processing elements only need to support two commands:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="kr">data</span> <span class="kt">InstrPEUp</span>
+  <span class="ow">=</span> <span class="kt">Clear</span>
+  <span class="c1">-- ^ Clear state, push old state plus product of incoming to upper neighbor</span>
+  <span class="o">|</span> <span class="kt">Data</span>
+  <span class="c1">-- ^ Move data from neighbor below to upper neighbor</span>
+    <span class="kr">deriving</span> <span class="p">(</span><span class="kt">Generic</span><span class="p">,</span> <span class="kt">Show</span><span class="p">,</span> <span class="kt">Eq</span><span class="p">,</span> <span class="kt">NFData</span><span class="p">)</span>
+</code></pre></div>
+
+
+<p>The implementation of the processing elements now looks like:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">pelemUp</span> <span class="p">((</span><span class="n">m</span><span class="p">,</span> <span class="n">n</span><span class="p">),</span> <span class="n">lrs</span><span class="p">,</span> <span class="n">rls</span><span class="p">,</span> <span class="n">tbs</span><span class="p">,</span> <span class="n">bts</span><span class="p">)</span> <span class="ow">=</span> <span class="p">(</span><span class="n">lrs</span><span class="p">,</span> <span class="n">rls</span><span class="p">,</span> <span class="n">tbs</span><span class="p">,</span> <span class="n">bts&#39;</span><span class="p">)</span>
+  <span class="kr">where</span>
+    <span class="n">bts&#39;</span> <span class="ow">=</span> <span class="n">mealy</span> <span class="n">pelem&#39;</span> <span class="mi">0</span> <span class="o">$</span> <span class="n">bundle</span> <span class="p">(</span><span class="n">lrs</span><span class="p">,</span> <span class="n">tbs</span><span class="p">,</span> <span class="n">bts</span><span class="p">)</span>
+    <span class="n">pelem&#39;</span> <span class="n">c</span> <span class="p">((</span><span class="kt">Clear</span><span class="p">,</span> <span class="n">a</span><span class="p">),</span> <span class="n">b</span><span class="p">,</span> <span class="n">_bt</span><span class="p">)</span> <span class="ow">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span>       <span class="n">a</span><span class="o">*</span><span class="n">b</span> <span class="o">+</span> <span class="n">c</span><span class="p">)</span>
+    <span class="n">pelem&#39;</span> <span class="n">c</span> <span class="p">((</span><span class="kt">Data</span><span class="p">,</span> <span class="n">a</span><span class="p">),</span>  <span class="n">b</span><span class="p">,</span> <span class="n">bt</span><span class="p">)</span>  <span class="ow">=</span> <span class="p">(</span><span class="n">a</span><span class="o">*</span><span class="n">b</span> <span class="o">+</span> <span class="n">c</span><span class="p">,</span> <span class="n">bt</span><span class="p">)</span>
+</code></pre></div>
+
+
+<p>Similar to our previous strategy, we need a simple component generating the commands passed to the processing elements. In contrast to our previous approach, we don&rsquo;t need to split delayed and undelayed inputs to the systolic array. The command generation component simply looks like:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">sysInput</span> <span class="n">n</span> <span class="n">col</span> <span class="n">row</span>
+  <span class="o">|</span> <span class="n">n</span> <span class="o">==</span> <span class="n">maxBound</span> <span class="ow">=</span> <span class="p">(</span><span class="n">zip</span> <span class="p">(</span><span class="n">repeat</span> <span class="kt">Clear</span><span class="p">)</span> <span class="n">col</span><span class="p">,</span> <span class="n">row</span><span class="p">)</span>
+  <span class="o">|</span> <span class="n">otherwise</span>     <span class="ow">=</span> <span class="p">(</span><span class="n">zip</span> <span class="p">(</span><span class="n">repeat</span> <span class="kt">Data</span><span class="p">)</span>  <span class="n">col</span><span class="p">,</span> <span class="n">row</span><span class="p">)</span>
+</code></pre></div>
+
+
+<p>which already concludes the implementation of this matrix multiplication algorithm.</p>
+
+<p>Bandwidth requirements per node, where <code>|a|</code> is the number of bits needed to store numeric type <code>a</code>:</p>
+
+<ul>
+<li>Top-to-bottom: <code>|a|</code></li>
+<li>Bottom-to-top: <code>|a|</code></li>
+<li>Left-to-right: <code>|a|</code> + 1</li>
+</ul>
+
+<p>Registers needed systolic array:</p>
+
+<ul>
+<li>Top: (p<sup>2</sup> - p) &middot; <code>|a|</code></li>
+<li>Left: 0.5 &middot; (m<sup>2</sup> - m) &middot; (<code>|a|</code> + 1)</li>
+<li>Nodes: pm &middot; <code>|a|</code></li>
+<li>Edges: 3pm &middot; (<code>|a|</code> + 1)</li>
+</ul>
+
+<p>The total latency from inputting the last row/column to receiving the last result row is <code>2m</code>, the number of rows in the left matrix.</p>
+
+<h2 id="a-quick-note-on-pipelined-processing-elements">A quick note on pipelined processing elements</h2>
+
+<p>One of the advantages of using a systolic array like this one is that integrating pipelined elements is easy. As long as all outputs are delayed by the same number of registers, the array will have the same behavior bar its increased latency. Clash offers some tools to make it easier to type these pipelined signals in the form of <a href="https://hackage.haskell.org/package/clash-prelude-0.99/docs/Clash-Signal-Delayed.html">delayed signals</a>. In fact, <a href="/blog/0001-matrix-multiplication/">a previous blogpost on matrix multiplication</a> used this to guarantee some timing aspects of its pipelined functions.</p>
+
+<h1 id="triangular-systolic-arrays">Triangular systolic arrays</h1>
+
+<p>Systolic arrays are not by definition of rectangular shape. For example, <a href="http://www.csd.uwo.ca/~moreno/CS433-CS9624/Resources/Matrix_Triangularization_by_systetolic_arrays.pdf">Gentleman and Kung</a> describe a systolic array with a triangular shape for many different algorithms. Due to a varying number of processing elements on each &ldquo;row&rdquo; of the systolic array, we cannot use the same tactic for building systolic arrays as before. Let&rsquo;s first look at a visualized systolic array as described by Gentleman and Kung:</p>
+
+<p><center><img src="halfSysArray.svg"></img></center></p>
+
+<p>Let&rsquo;s define the types of the different wires as follows:</p>
+
+<ul>
+<li><code>↓ :: tb</code> (<u>t</u>op-<u>b</u>ottom)</li>
+<li><code>↘ :: dg</code> (<u>d</u>ia<u>g</u>onal)</li>
+<li><code>→ :: lr</code> (<u>l</u>eft-<u>r</u>ight)</li>
+</ul>
+
+<p>Now, with these types, we can imagine that:</p>
+
+<ul>
+<li><code>○ :: Signal dom tb -&gt; Signal dom dg -&gt; (Signal dom dg, Signal dom lr)</code></li>
+<li><code>◻ :: Signal dom tb -&gt; Signal dom lr -&gt; (Signal dom tb, Signal dom lr)</code></li>
+</ul>
+
+<p>whereas our complete systolic array <code>triangularSystolicArray</code> is of type:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">triangularSystolicArray</span>
+  <span class="ow">::</span> <span class="p">(</span><span class="kt">Signal</span> <span class="n">dom</span> <span class="n">tb</span> <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="n">dg</span> <span class="ow">-&gt;</span> <span class="p">(</span><span class="kt">Signal</span> <span class="n">dom</span> <span class="n">dg</span><span class="p">,</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="n">lr</span><span class="p">))</span>
+  <span class="c1">-- ^ Function for ○</span>
+  <span class="ow">-&gt;</span> <span class="p">(</span><span class="kt">Signal</span> <span class="n">dom</span> <span class="n">tb</span> <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="n">lr</span> <span class="ow">-&gt;</span> <span class="p">(</span><span class="kt">Signal</span> <span class="n">dom</span> <span class="n">tb</span><span class="p">,</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="n">lr</span><span class="p">))</span>
+  <span class="c1">-- ^ Function for ◻</span>
+  <span class="ow">-&gt;</span> <span class="p">(</span><span class="n">tb</span><span class="p">,</span> <span class="n">dg</span><span class="p">,</span> <span class="n">lr</span><span class="p">)</span>
+  <span class="c1">-- ^ Register defaults</span>
+  <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="p">(</span><span class="kt">Vec</span> <span class="n">n</span> <span class="n">tb</span><span class="p">)</span>
+  <span class="c1">-- ^ Input from top</span>
+  <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="n">dg</span>
+  <span class="c1">-- ^ Input for first ○</span>
+  <span class="ow">-&gt;</span> <span class="p">(</span><span class="kt">Signal</span> <span class="n">dom</span> <span class="n">dg</span><span class="p">,</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="p">(</span><span class="kt">Vec</span> <span class="n">n</span> <span class="n">lr</span><span class="p">))</span>
+  <span class="c1">-- ^ (right outputs, diagonal output of last ○)</span>
+</code></pre></div>
+
+
+<p>Building this systolic array is a bit more complex due to its non-square shape. We can&rsquo;t simply hold every signal corresponding to a wire between processing elements in a vector, as the first row has <em>n</em> wires, the next <em>n-1</em>, etc. Similarly, the first column has <em>1</em> wire from left to right, while the second has <em>2</em>, etc. Luckily, we&rsquo;re only actually interested in the most right wires and we can safely discard the rest. If we can write a function creating a single column given the results of the previous column, <a href="https://hackage.haskell.org/package/clash-prelude-0.99.2/docs/Clash-Sized-Vector.html#v:dfold">dfold</a> promises to build the whole thing.</p>
+
+<p>Building a single column can be achieved with <code>mapAccumL</code>, accumulating the top-bottom output, while producing a left-right output for every inner processing element (◻). The top-bottom output is combined with the diagonal input from the previous column and an edge processing element (○). Thus:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">triangularColumn</span> <span class="n">edgeF</span> <span class="n">innerF</span> <span class="n">top</span> <span class="n">diagonal</span> <span class="n">lefts</span> <span class="ow">=</span> <span class="p">(</span><span class="n">diagonal&#39;</span><span class="p">,</span> <span class="n">bundle</span> <span class="o">$</span> <span class="n">rights</span> <span class="kt">:&lt;</span> <span class="n">right</span><span class="p">)</span>
+  <span class="kr">where</span>
+    <span class="c1">-- Apply inner functions</span>
+    <span class="p">(</span><span class="n">bottom</span><span class="p">,</span> <span class="n">rights</span><span class="p">)</span> <span class="ow">=</span> <span class="n">mapAccumL</span> <span class="n">innerF</span> <span class="n">top</span> <span class="p">(</span><span class="n">unbundle</span> <span class="n">lefts</span><span class="p">)</span>
+
+    <span class="c1">-- Terminate with edge function</span>
+    <span class="p">(</span><span class="n">diagonal&#39;</span><span class="p">,</span> <span class="n">right</span><span class="p">)</span> <span class="ow">=</span> <span class="n">edgeF</span> <span class="n">bottom</span> <span class="n">diagonal</span>
+</code></pre></div>
+
+
+<p>The definition must be slightly altered to include registers present at the output of every processing element. If omitted, all data would flow through the systolic array in a single cycle which is undesirable. This will finally get us:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">triangularColumn</span> <span class="n">edgeF</span> <span class="n">innerF</span> <span class="p">(</span><span class="n">tb</span><span class="p">,</span> <span class="n">dg</span><span class="p">,</span> <span class="n">lr</span><span class="p">)</span> <span class="n">top</span> <span class="n">diagonal</span> <span class="p">(</span><span class="n">unbundle</span> <span class="ow">-&gt;</span> <span class="n">lefts</span><span class="p">)</span> <span class="ow">=</span>
+  <span class="p">(</span><span class="n">diagonal&#39;</span><span class="p">,</span> <span class="n">bundle</span> <span class="o">$</span> <span class="n">rights</span> <span class="kt">:&lt;</span> <span class="n">right</span><span class="p">)</span>
+    <span class="kr">where</span>
+      <span class="c1">-- Simple helper function to delay tuples</span>
+      <span class="n">bidelay</span> <span class="p">(</span><span class="n">adflt</span><span class="p">,</span> <span class="n">bdflt</span><span class="p">)</span> <span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span> <span class="ow">=</span> <span class="p">(</span><span class="n">register</span> <span class="n">adflt</span> <span class="n">a</span><span class="p">,</span> <span class="n">register</span> <span class="n">bdflt</span> <span class="n">b</span><span class="p">)</span>
+
+      <span class="c1">-- Apply inner functions</span>
+      <span class="p">(</span><span class="n">bottom</span><span class="p">,</span> <span class="n">rights</span><span class="p">)</span> <span class="ow">=</span> <span class="n">mapAccumL</span> <span class="n">innerF&#39;</span> <span class="n">top</span> <span class="n">lefts</span>
+      <span class="n">innerF&#39;</span> <span class="n">top</span> <span class="n">left</span> <span class="ow">=</span> <span class="n">bidelay</span> <span class="p">(</span><span class="n">tb</span><span class="p">,</span> <span class="n">lr</span><span class="p">)</span> <span class="p">(</span><span class="n">innerF</span> <span class="n">top</span> <span class="n">left</span><span class="p">)</span>
+
+      <span class="c1">-- Terminate with edge function</span>
+      <span class="p">(</span><span class="n">diagonal&#39;</span><span class="p">,</span> <span class="n">right</span><span class="p">)</span> <span class="ow">=</span> <span class="n">bidelay</span> <span class="p">(</span><span class="n">dg</span><span class="p">,</span> <span class="n">lr</span><span class="p">)</span> <span class="p">(</span><span class="n">edgeF</span> <span class="n">bottom</span> <span class="n">diagonal</span><span class="p">)</span>
+</code></pre></div>
+
+
+<p>In order for <code>dfold</code> to work, it asks its users to define a type-level function yielding the type at iteration <em>n</em>. If the type works out after each iteration, the whole construct typechecks. We first need to define a data type used in to instantiate type level function application:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="c1">-- | Collection of types that don&#39;t change between fold-iterations, which</span>
+<span class="c1">-- we need to construct the type at some iteration.</span>
+<span class="kr">data</span>
+  <span class="kt">TriangularMotive</span>
+    <span class="p">(</span><span class="n">dg</span> <span class="ow">::</span> <span class="o">*</span><span class="p">)</span>
+    <span class="p">(</span><span class="n">lr</span> <span class="ow">::</span> <span class="o">*</span><span class="p">)</span>
+    <span class="p">(</span><span class="n">dom</span> <span class="ow">::</span> <span class="kt">Domain</span><span class="p">)</span>
+    <span class="p">(</span><span class="n">f</span> <span class="ow">::</span> <span class="kt">TyFun</span> <span class="kt">Nat</span> <span class="o">*</span><span class="p">)</span> <span class="ow">::</span> <span class="o">*</span>
+</code></pre></div>
+
+
+<p>Then, we provide an instance for <a href="https://hackage.haskell.org/package/singletons-2.2/docs/Data-Singletons.html#t:Apply">Apply</a>, the class used to implement type level functions. The actual type we end up with at the <em>n<sup>th</sup></em> iteration is simple enough: a tuple of the diagonal input and a vector of left-right outputs from our inner (◻) and edge (○) functions.</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="c1">-- | Intermediate type at fold-iteration /n/:</span>
+<span class="kr">type</span> <span class="kr">instance</span> <span class="kt">Apply</span> <span class="p">(</span><span class="kt">TriangularMotive</span> <span class="n">dg</span> <span class="n">lr</span> <span class="n">dom</span><span class="p">)</span> <span class="n">n</span> <span class="ow">=</span>
+  <span class="p">(</span><span class="kt">Signal</span> <span class="n">dom</span> <span class="n">dg</span><span class="p">,</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="p">(</span><span class="kt">Vec</span> <span class="n">n</span> <span class="n">r</span><span class="p">))</span>
+</code></pre></div>
+
+
+<p>We can now glue the whole array together. The actual code is mostly taken by type signatures needed to not disambiguate certain types:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">triangularSystolicArray</span>
+  <span class="ow">::</span> <span class="n">forall</span> <span class="n">n</span> <span class="n">tb</span> <span class="n">dg</span> <span class="n">lr</span> <span class="n">dom</span> <span class="n">gated</span> <span class="n">synchronous</span>
+   <span class="o">.</span> <span class="kt">HiddenClockReset</span> <span class="n">dom</span> <span class="n">gated</span> <span class="n">synchronous</span>
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">n</span>
+  <span class="ow">=&gt;</span> <span class="p">(</span><span class="kt">Signal</span> <span class="n">dom</span> <span class="n">tb</span> <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="n">dg</span> <span class="ow">-&gt;</span> <span class="p">(</span><span class="kt">Signal</span> <span class="n">dom</span> <span class="n">dg</span><span class="p">,</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="n">lr</span><span class="p">))</span>
+  <span class="c1">-- ^ Function for ○</span>
+  <span class="ow">-&gt;</span> <span class="p">(</span><span class="kt">Signal</span> <span class="n">dom</span> <span class="n">tb</span> <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="n">lr</span> <span class="ow">-&gt;</span> <span class="p">(</span><span class="kt">Signal</span> <span class="n">dom</span> <span class="n">tb</span><span class="p">,</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="n">lr</span><span class="p">))</span>
+  <span class="c1">-- ^ Function for ◻</span>
+  <span class="ow">-&gt;</span> <span class="p">(</span><span class="n">tb</span><span class="p">,</span> <span class="n">dg</span><span class="p">,</span> <span class="n">lr</span><span class="p">)</span>
+  <span class="c1">-- ^ Register defaults</span>
+  <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="p">(</span><span class="kt">Vec</span> <span class="n">n</span> <span class="n">tb</span><span class="p">)</span>
+  <span class="c1">-- ^ Input from top</span>
+  <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="n">dg</span>
+  <span class="c1">-- ^ Input for first ○</span>
+  <span class="ow">-&gt;</span> <span class="p">(</span><span class="kt">Signal</span> <span class="n">dom</span> <span class="n">dg</span><span class="p">,</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="p">(</span><span class="kt">Vec</span> <span class="n">n</span> <span class="n">lr</span><span class="p">))</span>
+  <span class="c1">-- ^ (right outputs, diagonal output of last ○)</span>
+<span class="nf">triangularSystolicArray</span> <span class="n">edgeF</span> <span class="n">innerF</span> <span class="n">dflts</span><span class="o">@</span><span class="p">(</span><span class="n">tbdflt</span><span class="p">,</span> <span class="kr">_</span><span class="p">,</span> <span class="kr">_</span><span class="p">)</span> <span class="n">tops</span> <span class="n">diagonal</span> <span class="ow">=</span>
+  <span class="p">(</span><span class="n">diagonal&#39;</span><span class="p">,</span> <span class="n">rights</span><span class="p">)</span>
+    <span class="kr">where</span>
+      <span class="c1">-- Add delays to top inputs, as described in paper</span>
+      <span class="n">tops&#39;</span> <span class="ow">=</span> <span class="n">smap</span> <span class="p">(</span><span class="n">delayN</span> <span class="n">tbdflt</span><span class="p">)</span> <span class="p">(</span><span class="n">unbundle</span> <span class="n">tops</span><span class="p">)</span>
+
+      <span class="c1">-- Fold over top inputs, progressively expanding the triangular array</span>
+      <span class="p">(</span><span class="n">diagonal&#39;</span><span class="p">,</span> <span class="n">rights</span><span class="p">)</span> <span class="ow">=</span>
+        <span class="n">dfold</span>
+          <span class="p">(</span><span class="kt">Proxy</span> <span class="o">@</span> <span class="p">(</span><span class="kt">TriangularMotive</span> <span class="n">dg</span> <span class="n">lr</span> <span class="n">dom</span><span class="p">))</span>
+          <span class="n">go</span>
+          <span class="p">(</span><span class="n">diagonal</span><span class="p">,</span> <span class="n">pure</span> <span class="kt">Nil</span><span class="p">)</span>
+          <span class="n">tops&#39;</span>
+
+      <span class="c1">-- Simple wrapping function around &#39;triangularColumn&#39;. Explicit types are</span>
+      <span class="c1">-- needed to not confuse the type checker.</span>
+      <span class="n">go</span>
+        <span class="ow">::</span> <span class="n">forall</span> <span class="n">l</span>
+         <span class="o">.</span> <span class="kt">SNat</span> <span class="n">l</span>
+        <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="n">tb</span>
+        <span class="ow">-&gt;</span> <span class="p">(</span><span class="kt">Signal</span> <span class="n">dom</span> <span class="n">dg</span><span class="p">,</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="p">(</span><span class="kt">Vec</span> <span class="n">l</span> <span class="n">lr</span><span class="p">))</span>
+        <span class="ow">-&gt;</span> <span class="p">(</span><span class="kt">Signal</span> <span class="n">dom</span> <span class="n">dg</span><span class="p">,</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="p">(</span><span class="kt">Vec</span> <span class="p">(</span><span class="n">l</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="n">lr</span><span class="p">))</span>
+      <span class="n">go</span> <span class="n">l</span><span class="o">@</span><span class="kt">SNat</span> <span class="n">tb</span> <span class="p">(</span><span class="n">dg</span><span class="p">,</span> <span class="n">lrs</span><span class="p">)</span> <span class="ow">=</span>
+        <span class="n">triangularColumn</span> <span class="n">edgeF</span> <span class="n">innerF</span> <span class="n">dflts</span> <span class="n">tb</span> <span class="n">dg</span> <span class="n">lrs</span>
+</code></pre></div>
+
+
+<p>Note that we haven&rsquo;t implemented any functionality yet, just like our previous general systolic array functions. It&rsquo;s now easy to build one though, as we only have to pass in the two functions, ◻ and ○.</p>
+
+<h1 id="matrix-triangularization">Matrix triangularization</h1>
+
+<p>Gentleman and Kung describe two algorithms expressed in terms of the triangular systolic array. We&rsquo;re going to implement the first one; <em>triangularization with neighbor pivoting</em> (page 3). The paper lays out the inner (&ldquo;internal&rdquo;) and boundary (&ldquo;edge&rdquo;) functions with pseudocode which we can more or less copy. The pseudo code is defined as a simple mealy machine, so that&rsquo;s how we&rsquo;ll do it as well. <code>safeQuot</code> is a function which returns zero if the denominator is zero, as also described in the paper:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="c1">-- &quot;Internal cell&quot; as mealy machine</span>
+<span class="nf">innerF</span> <span class="n">x</span> <span class="p">(</span><span class="n">x&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">m&#39;</span><span class="p">,</span> <span class="kt">True</span><span class="p">))</span>  <span class="ow">=</span> <span class="p">(</span><span class="n">x&#39;</span><span class="p">,</span> <span class="n">x</span>  <span class="o">+</span> <span class="p">(</span><span class="n">m&#39;</span> <span class="o">*</span> <span class="n">x&#39;</span><span class="p">))</span>
+<span class="nf">innerF</span> <span class="n">x</span> <span class="p">(</span><span class="n">x&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">m&#39;</span><span class="p">,</span> <span class="kt">False</span><span class="p">))</span> <span class="ow">=</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span>  <span class="n">x&#39;</span> <span class="o">+</span> <span class="p">(</span><span class="n">m&#39;</span> <span class="o">*</span> <span class="n">x</span> <span class="p">))</span>
+
+<span class="c1">-- &quot;Boundary cell&quot; as mealy machine</span>
+<span class="nf">edgeF</span> <span class="n">x</span> <span class="n">x&#39;</span>
+  <span class="o">|</span> <span class="n">abs</span> <span class="n">x&#39;</span> <span class="o">&gt;=</span> <span class="n">abs</span> <span class="n">x</span> <span class="ow">=</span> <span class="p">(</span><span class="n">x&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">safeQuot</span> <span class="n">x</span> <span class="n">x&#39;</span><span class="p">,</span>          <span class="kt">True</span><span class="p">))</span>
+  <span class="o">|</span> <span class="n">otherwise</span>       <span class="ow">=</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span>  <span class="p">(</span><span class="n">negate</span> <span class="o">$</span> <span class="n">safeQuot</span> <span class="n">x&#39;</span> <span class="n">x</span><span class="p">,</span> <span class="kt">False</span><span class="p">))</span>
+</code></pre></div>
+
+
+<p>The systolic array is then created by slightly modifying these functions to signal notation, and calling <code>triangularSystolicArray</code>. Note that the algorithm doesn&rsquo;t actually use the diagonal communication lines. Just like when we didn&rsquo;t use all communication channels in the square systolic array, we&rsquo;ll simply pass Haskell&rsquo;s &ldquo;empty&rdquo; type: unit (<code>()</code>). Empty types will be filtered by Clash.</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">neighborPivotTriangularization</span>
+  <span class="ow">::</span> <span class="n">forall</span> <span class="n">n</span> <span class="n">a</span> <span class="n">dom</span> <span class="n">gated</span> <span class="n">synchronous</span>
+   <span class="o">.</span> <span class="kt">HiddenClockReset</span> <span class="n">dom</span> <span class="n">gated</span> <span class="n">synchronous</span>
+  <span class="ow">=&gt;</span> <span class="kt">Integral</span> <span class="n">a</span>
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">n</span>
+  <span class="ow">=&gt;</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="p">(</span><span class="kt">Vec</span> <span class="n">n</span> <span class="n">a</span><span class="p">)</span>
+  <span class="c1">-- ^ Rows of matrix</span>
+  <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="p">(</span><span class="kt">Vec</span> <span class="n">n</span> <span class="n">a</span><span class="p">)</span>
+<span class="nf">neighborPivotTriangularization</span> <span class="n">rows</span> <span class="ow">=</span> <span class="n">fmap</span> <span class="n">fst</span> <span class="o">&lt;$&gt;</span> <span class="n">lrs</span>
+  <span class="kr">where</span>
+    <span class="c1">-- Instantiate systolic array</span>
+    <span class="p">(</span><span class="kr">_</span><span class="p">,</span> <span class="n">lrs</span><span class="p">)</span> <span class="ow">=</span>
+      <span class="n">triangularSystolicArray</span>
+        <span class="c1">-- Processing elements:</span>
+        <span class="n">edgeF&#39;</span> <span class="n">innerF&#39;</span>
+        <span class="c1">-- Defaults for registers:</span>
+        <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">()</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="kt">False</span><span class="p">))</span>
+        <span class="c1">-- Top-bottom input:</span>
+        <span class="n">rows</span>
+        <span class="c1">-- Diagonal input:</span>
+        <span class="p">(</span><span class="n">pure</span> <span class="nb">()</span><span class="p">)</span>
+
+    <span class="c1">-- Turn mealy machines into signal constructs</span>
+    <span class="n">edgeF&#39;</span> <span class="n">tb</span> <span class="n">dg</span>  <span class="ow">=</span> <span class="p">(</span><span class="n">dg</span><span class="p">,</span> <span class="n">mealy</span> <span class="n">edgeF</span> <span class="mi">0</span> <span class="n">tb</span><span class="p">)</span>
+    <span class="n">innerF&#39;</span> <span class="n">tb</span> <span class="n">lr</span> <span class="ow">=</span> <span class="p">(</span><span class="n">mealy</span> <span class="n">innerF</span> <span class="mi">0</span> <span class="p">(</span><span class="n">liftA2</span> <span class="p">(,)</span> <span class="n">tb</span> <span class="n">lr</span><span class="p">),</span> <span class="n">lr</span><span class="p">)</span>
+</code></pre></div>
+
+
+<p>The paper does not tell us how to retrieve the results from the array. Like any systolic array, we could introduce flush rounds or increase bandwidth to move the results to the array borders. We&rsquo;ve already seen this process for matrix multiplication, so we&rsquo;ll skip it for this one.</p>
+
+<h1 id="conclusion">Conclusion</h1>
+
+<p>We&rsquo;ve built two types of systolic arrays in Clash, both solving real-world problems. Although the design methodology in Clash is somewhat different than other (traditional) tooling, it hopefully gave a feeling on how to build generalized solutions in Clash, while retaining readability. Any thoughts or questions can be left in the comments. See you in a next blogpost!</p>
+
+<!-- Javascript and CSS --> 
+
+<script src="script.js"></script>
+
+<style>
+.sysarray{
+  min-height:568px;
+}
+
+.sysarray table, 
+.sysarray td{
+  border:none;
+  text-align:center;
+}
+
+.sysarray td{ 
+  height:65px;
+  width:65px;
+}
+
+.sysarray .a{
+  background-color: #FFF2CC;
+}
+
+.sysarray .b{
+  background-color: #DAE8FC;
+}
+
+.systolic table{ 
+  height:auto;
+  width:auto;
+  font-family: monospace;
+}
+
+.sysarray td.pe{
+  border: 1px solid black;
+}
+
+#mm0 table{
+  width:80%;
+}
+
+#mm0 {
+  min-height:439px;
+}
+
+#mm1 td.pe,
+#mm2 td.pe,
+#mm3 td.pe,
+#mm4 td.pe{
+  font-size:0.8em;
+
+}
+
+</style>
+
+		</div>
+		
+<div class="post__tags tags clearfix">
+	<svg class="icon icon-tag" width="16" height="16" viewBox="0 0 16 16"><path d="M16 9.5c0 .373-.24.74-.5 1l-5 5c-.275.26-.634.5-1 .5-.373 0-.74-.24-1-.5L1 8a2.853 2.853 0 0 1-.7-1C.113 6.55 0 5.973 0 5.6V1.4C0 1.034.134.669.401.401.67.134 1.034 0 1.4 0h4.2c.373 0 .95.113 1.4.3.45.187.732.432 1 .7l7.5 7.502c.26.274.5.632.5.998zM3.5 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/></svg>
+	<ul class="tags__list">
+		<li class="tags__item"><a class="tags__link btn" href="/tags/systolic-arrays/" rel="tag">Systolic arrays</a></li>
+		<li class="tags__item"><a class="tags__link btn" href="/tags/design/" rel="tag">Design</a></li>
+	</ul>
+</div>
+	</article>
+	
+
+<div class="authorbox clearfix">
+	<figure class="authorbox__avatar">
+		<img alt="Martijn Bastiaan avatar" src="/media/authors/martijnbastiaan.png" class="avatar" height="90" width="90">
+	</figure>
+	<div class="authorbox__header">
+		<span class="authorbox__name">About Martijn Bastiaan</span>
+	</div>
+	<div class="authorbox__description">
+		Martijn Bastiaan has been a software engineer at <a href='http://qbaylogic.com/'>QBayLogic</a> since 2017. He is an active contributer to the Clash compiler itself.
+	</div>
+</div>
+
+	
+<nav class="post-nav row clearfix">
+	<div class="post-nav__item post-nav__item--prev col-1-2">
+		<a class="post-nav__link" href="/blog/0001-matrix-multiplication/" rel="prev"><span class="post-nav__caption">«&thinsp;Previous</span><p class="post-nav__post-title">Matrix multiplication with Clash</p></a>
+	</div>
+</nav>
+	
+<section class="comments">
+	<div id="disqus_thread"></div>
+<script>
+    var disqus_config = function () {
+    
+    
+    
+    };
+    (function() {
+        if (["localhost", "127.0.0.1"].indexOf(window.location.hostname) != -1) {
+            document.getElementById('disqus_thread').innerHTML = 'Disqus comments not available by default when the website is previewed locally.';
+            return;
+        }
+        var d = document, s = d.createElement('script'); s.async = true;
+        s.src = '//' + "clash-lang" + '.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', +new Date());
+        (d.head || d.body).appendChild(s);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="https://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</section>
+
+</main>
+
+
+    <style>main{ margin-right: 0!important; }</style>
+
+
+
+
+	</div>
+		<footer class="footer">
+			<div class="container container-inner">
+				<div class="footer__copyright">&copy; 2018 clash-lang.org</div>
+			</div>
+		</footer>
+	</div>
+
+<script>
+	var navigation = responsiveNav(".menu", {
+		navClass: "menu--collapse",
+	});
+</script>
+</body>
+</html>

@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+  xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  
+  <url>
+    <loc>https://clash-lang.org/</loc>
+    <lastmod>2018-07-25T00:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>https://clash-lang.org/blog/0002-systolic-arrays/</loc>
+    <lastmod>2018-07-25T00:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>https://clash-lang.org/blog/0001-matrix-multiplication/</loc>
+    <lastmod>2018-07-09T00:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>https://clash-lang.org/news/01-welcome/</loc>
+    <lastmod>2018-07-01T00:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>https://clash-lang.org/publications/</loc>
+  </url>
+  
+  <url>
+    <loc>https://clash-lang.org/blog/</loc>
+    <lastmod>2018-07-25T00:00:00+00:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://clash-lang.org/categories/</loc>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://clash-lang.org/tags/design/</loc>
+    <lastmod>2018-07-25T00:00:00+00:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://clash-lang.org/documentation/</loc>
+  </url>
+  
+  <url>
+    <loc>https://clash-lang.org/downloads/</loc>
+  </url>
+  
+  <url>
+    <loc>https://clash-lang.org/tags/matrices/</loc>
+    <lastmod>2018-07-09T00:00:00+00:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://clash-lang.org/news/</loc>
+    <lastmod>2018-07-01T00:00:00+00:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://clash-lang.org/support/</loc>
+  </url>
+  
+  <url>
+    <loc>https://clash-lang.org/tags/systolic-arrays/</loc>
+    <lastmod>2018-07-25T00:00:00+00:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://clash-lang.org/tags/</loc>
+    <lastmod>2018-07-25T00:00:00+00:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://clash-lang.org/categories/tutorial/</loc>
+    <lastmod>2018-07-25T00:00:00+00:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+</urlset>

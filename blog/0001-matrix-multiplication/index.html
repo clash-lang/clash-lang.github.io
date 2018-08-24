@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+    
+        
+            <title>Clash: Matrix multiplication with Clash</title>
+        
+    
+
+	<meta name="description" content="Building, restructuring, and pipelining matrix multiplication with Clash">
+	<meta name="generator" content="Hugo 0.44" />
+	<meta property="og:title" content="Matrix multiplication with Clash" />
+<meta property="og:description" content="Building, restructuring, and pipelining matrix multiplication with Clash" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://clash-lang.org/blog/0001-matrix-multiplication/" />
+
+
+
+<meta property="article:published_time" content="2018-07-09T00:00:00&#43;00:00"/>
+
+<meta property="article:modified_time" content="2018-07-09T00:00:00&#43;00:00"/>
+
+
+
+
+
+
+
+
+
+
+
+	
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+	<link rel="stylesheet" href="/css/style.css">
+	<link rel="stylesheet" href="/css/syntax.css">
+	<script type="text/javascript" src="/js/scripts.js"></script>
+	<script type="text/javascript" src="/js/jquery-3.3.1.min.js"></script>
+	<link rel="shortcut icon" href="/media/logos/favicon.png">
+	
+</head>
+<body class="body body-no-sidebar">
+	<div class="container container-outer">
+		<header class="header">
+			
+<nav class="menu">
+    
+        
+            <a href="/">
+    <div class="menu__logo">
+        <div class="menu__logo__inner">clash-lang.org</div>
+    </div>
+</a>
+
+
+        
+    
+
+	<ul class="menu__list">
+		<li class="menu__item"><a class="menu__link" href="/support/">Support plan</a></li>
+		<li class="menu__item"><a class="menu__link" href="/news/">News</a></li>
+		<li class="menu__item"><a class="menu__link" href="/blog/">Blog</a></li>
+		<li class="menu__item"><a class="menu__link" href="/publications/">Publications</a></li>
+		<li class="menu__item"><a class="menu__link" href="/documentation/">Documentation</a></li>
+		<li class="menu__item"><a class="menu__link" href="/downloads/">Downloads</a></li>
+	</ul>
+</nav>
+
+
+		</header>
+        
+        
+        
+		<div class="wrapper clearfix">
+
+
+<main class="main content">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Matrix multiplication with Clash</h1><div class="post__meta meta">
+<svg class="icon icon-time" width="16" height="14" viewBox="0 0 16 16"><path d="m8-.0000003c-4.4 0-8 3.6-8 8 0 4.4000003 3.6 8.0000003 8 8.0000003 4.4 0 8-3.6 8-8.0000003 0-4.4-3.6-8-8-8zm0 14.4000003c-3.52 0-6.4-2.88-6.4-6.4000003 0-3.52 2.88-6.4 6.4-6.4 3.52 0 6.4 2.88 6.4 6.4 0 3.5200003-2.88 6.4000003-6.4 6.4000003zm.4-10.4000003h-1.2v4.8l4.16 2.5600003.64-1.04-3.6-2.1600003z"/></svg>
+<time class="post__meta-date meta-date" datetime="2018-07-09T00:00:00">July 09, 2018</time>
+<span class="post__meta-categories meta-categories">
+	<svg class="icon icon-category" width="16" height="16" viewBox="0 0 16 16"><path d="m7 2l1 2h8v11h-16v-13z"/></svg>
+	<span class="meta-categories__list"><a class="meta-categories__link" href="/categories/tutorial" rel="category">Tutorial</a></span>
+</span></div>
+		</header>
+<div class="post__toc toc">
+	<div class="toc__title">Page content</div>
+	<div class="toc__menu">
+		<nav id="TableOfContents">
+<ul>
+<li><a href="#setting-up">Setting up</a></li>
+<li><a href="#matrix-multiplication">Matrix multiplication</a>
+<ul>
+<li><a href="#haskell-implementation">Haskell implementation</a></li>
+<li><a href="#clash-implementation">Clash implementation</a>
+<ul>
+<li><a href="#splitting-hardware">Splitting hardware</a></li>
+<li><a href="#pipelining-dot">Pipelining <code>dot</code></a></li>
+<li><a href="#putting-it-together-again">Putting it together again</a></li>
+</ul></li>
+</ul></li>
+<li><a href="#conclusion-and-reflection">Conclusion and reflection</a>
+<ul>
+<li><a href="#delayed-signals-what-are-they-really">Delayed signals: what are they <em>really</em>?</a></li>
+<li><a href="#pipelining-we-need-a-stdlib">Pipelining: we need a stdlib</a></li>
+</ul></li>
+<li><a href="#faq">FAQ</a>
+<ul>
+<li><a href="#what-is-knownnat-n">What is <code>KnownNat n</code>?</a></li>
+<li><a href="#why-does-sum-only-accept-non-empty-vectors">Why does <code>sum</code> only accept non-empty vectors?</a></li>
+<li><a href="#what-does-couldn-t-match-type-ax-with-by-mean">What does <code>Couldn't match type ‘ax’ with ‘by’</code> mean?</a></li>
+</ul></li>
+</ul>
+</nav>
+	</div>
+</div>
+<div class="post__content clearfix">
+			
+
+<script src="script.js" defer></script>
+
+<p><em>Matrix multiplications happen to be useful in a very broad range of computational applications, such as computer graphics, artificial intelligence, and climate change research. At QbayLogic we help implement these (and more) applications on FPGAs using Clash. In this blogpost we will explore the intricacies of implementing matrix multiplications on FPGAs. We will explore the apparent differences between hardware and software development, how to use Clash to convert a “naive” algorithm to one suitable for an FPGA, and the use of Clash dependent types.</em></p>
+
+<p><em>Our goal is to create a flexible yet efficient matrix multiplier. We want a pipelined architecture, polymorphic in its element type. That is, it should handle different number types (float, double, integers) even when the operations on these different types have different timing characteristics. We will see Clash is up for the task, providing a generic description for hardware polymorphic in timing and matrix dimensions. At the end of the post we’ll reflect on the experience and offer thoughts on the difficulties we encountered and how Clash could ease them in the future.</em></p>
+
+<hr>
+
+<h1 id="setting-up">Setting up</h1>
+
+<p>The source code corresponding to this blogpost (including cabal files, etc.) can be found at <a href="https://github.com/clash-lang/TODO">github.com/clash-lang/TODO</a>. Checkout the branch belonging to a certain stage in the tutorial. In order to execute the project, you need at least Cabal 2.2 and GHC 8.4. If your default compiler is GHC 8.4 you can simply run:</p>
+
+<div class="highlight"><pre><code class="language-bash" data-lang="bash">cabal new-run
+</code></pre></div>
+
+
+<p>Otherwise, you would point Cabal to the compiler you wish to use:</p>
+
+<div class="highlight"><pre><code class="language-bash" data-lang="bash">cabal new-run --with-compiler<span class="o">=</span>/opt/ghc/8.4.1/bin/ghc
+</code></pre></div>
+
+
+<p>To run <code>clash</code> from this project, run:</p>
+
+<div class="highlight"><pre><code class="language-bash" data-lang="bash">cabal new-exec clash -- file1.hs file2.hs
+</code></pre></div>
+
+
+<h1 id="matrix-multiplication">Matrix multiplication</h1>
+
+<p>In order to define matrix multiplication, we first need to define a fundamental operation it uses: the dot-product. Given two vectors <em>a</em> and <em>b</em> both of length <em>n</em>, the dot product is:</p>
+
+<p>$$ a \cdot b = \sum_{i=1}^n a_i b_i $$</p>
+
+<p>or in Haskell:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">dot</span> <span class="n">a</span> <span class="n">b</span> <span class="ow">=</span> <span class="n">sum</span> <span class="p">(</span><span class="n">zipWith</span> <span class="p">(</span><span class="o">*</span><span class="p">)</span> <span class="n">a</span> <span class="n">b</span><span class="p">)</span>
+</code></pre></div>
+
+
+<p>The matrix multiplication is then defined as:</p>
+
+<p>$$ (AB)_{ij} = A_i \cdot (B^T)_j $$</p>
+
+<p>where</p>
+
+<ul>
+<li><em>(AB)<sub>ij</sub></em> the element of <em>AB</em> located at the <em>i<sup>th</sup></em> row and <em>j<sup>th</sup></em> column.</li>
+<li><em>A<sub>i</sub></em> denotes the <em>i<sup>th</sup></em> row of <em>A</em></li>
+<li><em>(B<sup>T</sup>)<sub>j</sub></em> denotes the <em>j<sup>th</sup></em> column of <em>B</em></li>
+</ul>
+
+<p>To get a feeling for matrix multiplication, play around with an interactive example kindly provided by André Staltz (<a href="https://github.com/staltz/matrixmultiplication.xyz">source</a>):</p>
+
+<iframe style="border:none;" width="100%" height="460px" src="matrixmultiplication.xyz"></iframe>
+
+<p>Note that the example calculates the result partially sequentially and partially in parallel. Most algorithms would iterate the rows of the first matrix and for each step iterate the columns of the second. I.e., it would compute..</p>
+
+<p>$$ 1 \cdot 2 + 2 \cdot 6 + 1 \cdot 1 = 15 $$
+$$ 1 \cdot 5 + 2 \cdot 7 + 1 \cdot 8 = 27 $$
+$$ 0 \cdot 2 + 1 \cdot 6 + 0 \cdot 1 = 6 $$
+$$ 0 \cdot 5 + 1 \cdot 7 + 0 \cdot 8 = 7 $$
+$$ 2 \cdot 2 + 3 \cdot 6 + 4 \cdot 1 = 26 $$
+$$ 2 \cdot 5 + 3 \cdot 7 + 4 \cdot 8 = 63 $$</p>
+
+<p>.. in order. In fact, many other strategies exist. A fully parallel algorithm would calculate each result cell &ldquo;at the same time&rdquo;. Other algorithms might opt execute <em>n</em> dot product in parallel, but implement its dot product with an accumulator only executing one multiplication each timestep.</p>
+
+<h2 id="haskell-implementation">Haskell implementation</h2>
+
+<p>Let&rsquo;s make an implementation in native Haskell. The most obvious way to store a matrix in many computer programming languages is a 2D array / list. This makes sense for Haskell too, reflected in the following type:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="kr">type</span> <span class="kt">Vector</span> <span class="ow">=</span> <span class="p">[</span><span class="kt">Int</span><span class="p">]</span>
+<span class="kr">type</span> <span class="kt">Matrix</span> <span class="ow">=</span> <span class="p">[</span><span class="kt">Vector</span><span class="p">]</span>
+</code></pre></div>
+
+
+<p>For simplicity, we&rsquo;ll assume a matrix only holds integers. The most straightforward matrix multiplication algorithm then looks like:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="c1">-- | Dot product (repeated)</span>
+<span class="nf">dot</span>
+  <span class="ow">::</span> <span class="kt">Vector</span>
+  <span class="ow">-&gt;</span> <span class="kt">Vector</span>
+  <span class="ow">-&gt;</span> <span class="kt">Int</span>
+<span class="nf">dot</span> <span class="n">vec1</span> <span class="n">vec2</span> <span class="ow">=</span> 
+  <span class="n">sum</span> <span class="p">(</span><span class="n">zipWith</span> <span class="p">(</span><span class="o">*</span><span class="p">)</span> <span class="n">vec1</span> <span class="n">vec2</span><span class="p">)</span>
+
+<span class="c1">-- | Matrix/vector multiplication</span>
+<span class="nf">mvMult</span>
+  <span class="ow">::</span> <span class="kt">Matrix</span>
+  <span class="ow">-&gt;</span> <span class="kt">Vector</span>
+  <span class="ow">-&gt;</span> <span class="kt">Vector</span>
+<span class="nf">mvMult</span> <span class="n">mat</span> <span class="n">vec</span> <span class="ow">=</span> 
+  <span class="n">map</span> <span class="p">(</span><span class="n">dot</span> <span class="n">vec</span><span class="p">)</span> <span class="n">mat</span>
+
+<span class="c1">-- | Matrix/matrix multiplication</span>
+<span class="nf">mmMult</span> 
+  <span class="ow">::</span> <span class="kt">Matrix</span> 
+  <span class="ow">-&gt;</span> <span class="kt">Matrix</span> 
+  <span class="ow">-&gt;</span> <span class="kt">Matrix</span>
+<span class="nf">mmMult</span> <span class="n">mat1</span> <span class="n">mat2</span> <span class="ow">=</span> 
+  <span class="n">map</span> <span class="p">(</span><span class="n">mvMult</span> <span class="p">(</span><span class="n">transpose</span> <span class="n">mat2</span><span class="p">))</span> <span class="n">mat1</span>
+</code></pre></div>
+
+
+<p>Matrix multiplication is an excellent candidate for hardware acceleration: every element in the result matrix is independently calculated. In fact, the Haskell implementation we just made does not impose a calculation order at all thanks to lazy evaluation. We could therefore compute the whole thing in parallel. Computing a matrix product in parallel is no easy task though. For a single matrix <em>C</em> one needs to compute <i>ay*bx</i> dot products, where each dot product computes <em>ax</em> multiplications and <em>ax</em> additions. Lumping these together gives us <i>ay*bx*2ax</i> operations, or a massive 270 million hardware elements for a <em>512x512</em> matrix.</p>
+
+<h2 id="clash-implementation">Clash implementation</h2>
+
+<p>In order to compile our algorithm to a traditional hardware description language, we need to add length information to our code. Haskell lists are linked lists without (explicitly) stored length information, thus rendering them unsuitable for our purposes. As replacement, <a href="http://hackage.haskell.org/package/clash-prelude-0.99.2/docs/Clash-Sized-Vector.html">Clash offers vectors</a> called <code>Vec</code>s. <code>Vec</code>s can store arbitrary data.</p>
+
+<p>Clash is only slightly different from GHC. It enables some extensions and uses <a href="http://hackage.haskell.org/package/clash-prelude-0.99.2/docs/Clash-Prelude.html">its own Prelude</a>. Most functions defined in Haskell&rsquo;s Prelude, you&rsquo;ll find in Clash&rsquo;s too. In fact, you&rsquo;ll see that our implementation hardly changes. Let first redefine our types:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="kr">type</span> <span class="kt">Matrix</span> <span class="n">m</span> <span class="n">n</span> <span class="ow">=</span> <span class="kt">Vec</span> <span class="n">m</span> <span class="p">(</span><span class="kt">Vec</span> <span class="n">n</span> <span class="kt">Int</span><span class="p">)</span>
+</code></pre></div>
+
+
+<p>This is conceptually the same as <code>[[Int]]</code>, but with length information added. <code>n</code> is now the number of rows, while <code>m</code> indicates the number of columns. Let&rsquo;s redefine <code>dot</code> first:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="c1">-- | Dot product</span>
+<span class="nf">dot</span>
+  <span class="ow">::</span> <span class="kt">KnownNat</span> <span class="n">n</span>
+  <span class="c1">-- ^ Constraint 1: Store length information at runtime too</span>
+  <span class="ow">=&gt;</span> <span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">n</span>
+  <span class="c1">-- ^ Constraint 2: Vectors must be at least of length one</span>
+  <span class="ow">=&gt;</span> <span class="kt">Vec</span> <span class="n">n</span> <span class="kt">Int</span>
+  <span class="ow">-&gt;</span> <span class="kt">Vec</span> <span class="n">n</span> <span class="kt">Int</span>
+  <span class="ow">-&gt;</span> <span class="kt">Int</span>
+<span class="nf">dot</span> <span class="n">vec1</span> <span class="n">vec2</span> <span class="ow">=</span> 
+  <span class="n">sum</span> <span class="p">(</span><span class="n">zipWith</span> <span class="p">(</span><span class="o">*</span><span class="p">)</span> <span class="n">vec1</span> <span class="n">vec2</span><span class="p">)</span>
+</code></pre></div>
+
+
+<p>Note that the only thing we changed is its type signature, while its implementation stayed exactly the same. Two <em>constraints</em> are added to the type signature:</p>
+
+<ol>
+<li><code>KnownNat n</code>: allows the implementation to access vector length information at runtime. This is needed for some implementations of functions associated with <code>Foldable</code>.</li>
+<li><code>1 &lt;= n</code>: requires both vectors to be at least of length one, needed for <code>sum</code>. In fact, all functions associated with <code>Foldable</code> require this. See the FAQ for further dicussion.</li>
+</ol>
+
+<p>Besides that, lenghts are left completely polymorphic. The only thing Clash requires is that the lenghts are known when it compiles it down to VHDL. Only the very top of a design, and subsequently the whole tree it implicitly uses, needs to be monomorphic.</p>
+
+<p>Compiling with Clash is similar to GHC, thus we need similar boilerplate to actually execute:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="kr">module</span> <span class="nn">Clash.Blog.MM.Main</span> <span class="kr">where</span>
+
+<span class="kr">import</span> <span class="nn">Clash.Prelude</span>
+
+<span class="c1">--</span>
+<span class="c1">-- dot definition here..</span>
+<span class="c1">--</span>
+
+<span class="nf">main</span> <span class="ow">::</span> <span class="kt">IO</span> <span class="nb">()</span>
+<span class="nf">main</span> <span class="ow">=</span> <span class="kr">do</span>
+  <span class="kr">let</span> <span class="n">a</span> <span class="ow">=</span> <span class="p">(</span><span class="mi">1</span> <span class="kt">:&gt;</span> <span class="mi">2</span> <span class="kt">:&gt;</span> <span class="kt">Nil</span><span class="p">)</span>
+  <span class="kr">let</span> <span class="n">b</span> <span class="ow">=</span> <span class="p">(</span><span class="mi">5</span> <span class="kt">:&gt;</span> <span class="mi">7</span> <span class="kt">:&gt;</span> <span class="kt">Nil</span><span class="p">)</span>
+  <span class="n">putStrLn</span> <span class="o">$</span> <span class="n">show</span> <span class="o">$</span> <span class="n">dot</span> <span class="n">a</span> <span class="n">b</span>
+</code></pre></div>
+
+
+<p>Then, simply compile and execute the resulting binary:</p>
+
+<div class="highlight"><pre><code class="language-bash" data-lang="bash">martijn@clashtop <span class="nv">$ </span>clash Main.hs
+<span class="o">[</span>1 of 1<span class="o">]</span> Compiling Main             <span class="o">(</span> Main.hs, Main.o <span class="o">)</span>
+Linking Main ...
+martijn@clashtop <span class="nv">$ </span>./Main
+19
+</code></pre></div>
+
+
+<p>Next up is the matrix/vector multiplication:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="c1">-- | Matrix/vector multiplication</span>
+<span class="nf">mvMult</span>
+  <span class="ow">::</span> <span class="kt">KnownNat</span> <span class="n">n</span>
+  <span class="ow">=&gt;</span> <span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">n</span>
+  <span class="c1">-- ^ Constraints needed for `dot`</span>
+  <span class="ow">=&gt;</span> <span class="kt">Matrix</span> <span class="n">m</span> <span class="n">n</span>
+  <span class="c1">-- ^ Matrix with `m` rows, `n` columns</span>
+  <span class="ow">-&gt;</span> <span class="kt">Vec</span> <span class="n">n</span> <span class="kt">Int</span>
+  <span class="c1">-- ^ Vector with `n` integers</span>
+  <span class="ow">-&gt;</span> <span class="kt">Vec</span> <span class="n">m</span> <span class="kt">Int</span>
+<span class="nf">mvMult</span> <span class="n">mat</span> <span class="n">vec</span> <span class="ow">=</span> 
+  <span class="n">map</span> <span class="p">(</span><span class="n">dot</span> <span class="n">vec</span><span class="p">)</span> <span class="n">mat</span>
+</code></pre></div>
+
+
+<p>Again, note the actual implementation did not change. And last but not least, matrix matrix multiplication:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="c1">-- | Matrix/matrix multiplication</span>
+<span class="nf">mmMult</span> 
+  <span class="ow">::</span> <span class="n">an</span> <span class="o">~</span> <span class="n">bm</span>
+  <span class="c1">-- ^ Number of columns of matrix A must be</span>
+  <span class="c1">-- equal to the number of rows in matrix B.</span>
+  <span class="ow">=&gt;</span> <span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">bm</span>
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">bn</span>
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">bm</span>
+  <span class="ow">=&gt;</span> <span class="kt">Matrix</span> <span class="n">am</span> <span class="n">an</span>
+  <span class="ow">-&gt;</span> <span class="kt">Matrix</span> <span class="n">bm</span> <span class="n">bn</span>
+  <span class="ow">-&gt;</span> <span class="kt">Matrix</span> <span class="n">am</span> <span class="n">bn</span>
+<span class="nf">mmMult</span> <span class="n">mat1</span> <span class="n">mat2</span> <span class="ow">=</span> 
+  <span class="n">map</span> <span class="p">(</span><span class="n">mvMult</span> <span class="p">(</span><span class="n">transpose</span> <span class="n">mat2</span><span class="p">))</span> <span class="n">mat1</span>
+</code></pre></div>
+
+
+<p>And yet again we see the implementation does not actually change over the native Haskell one. The only thing we need to do is add length information to our types to satisfy the Clash compiler.</p>
+
+<h3 id="splitting-hardware">Splitting hardware</h3>
+
+<p>In the previous section we built a fully parallel, synthesizable matrix multiplication algorithm. This description works fine for small matrices, but quickly grows until it doesn’t fit on even the largest FPGAs. We don&rsquo;t want a fully serial implementation either, which would underutilize our hardware. Ideally, we would like to write a &ldquo;scalable&rdquo; algorithm whose parameters can be set in such a way that it perfectly matches our target architecture. This doesn&rsquo;t seem easy, but it is doable in Clash as we&rsquo;ll show in this section.</p>
+
+<p>Like numbers, matrices form a <a href="https://en.wikipedia.org/wiki/Semiring">semiring</a>. Crudely speaking, some &ldquo;type&rdquo; is a semiring as soon it supports <a href="https://en.wikipedia.org/wiki/Matrix_addition">addition</a> and <a href="https://en.wikipedia.org/wiki/Matrix_multiplication">multiplication</a> and inhibits &ldquo;number-like&rdquo; properties such as a zero-element, a one-element, and distribution over addition. Interestingly, the following holds:</p>
+
+<p>$$
+A =
+\begin{bmatrix}
+    a &amp; b &amp; c &amp; d \\
+    e &amp; f &amp; g &amp; h \\
+    i &amp; j &amp; k &amp; l \\
+    m &amp; n &amp; o &amp; p
+\end{bmatrix} AA = \begin{bmatrix}
+\begin{bmatrix} a &amp; b \\ e &amp; f \end{bmatrix} &amp; \begin{bmatrix} c &amp; d \\ g &amp; h \end{bmatrix} \\ \begin{bmatrix} i &amp; j \\ m &amp; n \end{bmatrix} &amp; \begin{bmatrix} k &amp; l \\ o &amp; p \end{bmatrix} \end{bmatrix}
+$$</p>
+
+<p>$$
+B = \begin{bmatrix}
+    \alpha &amp; \beta &amp; \gamma &amp; \delta \\
+    \epsilon &amp; \zeta &amp; \eta &amp; \theta \\
+    \iota &amp; \tau &amp; \kappa &amp; \lambda \\
+    \mu &amp; \nu &amp; \omicron &amp; \pi
+\end{bmatrix} BB = \begin{bmatrix}
+\begin{bmatrix} \alpha &amp; \beta \\ \epsilon &amp; \zeta \end{bmatrix} &amp; \begin{bmatrix} \gamma &amp; \delta \\ \eta &amp; \theta \end{bmatrix} \\ \begin{bmatrix} \iota &amp; \tau \\ \mu &amp; \nu \end{bmatrix} &amp; \begin{bmatrix} \kappa &amp; \lambda \\ \omicron &amp; \pi \end{bmatrix} \end{bmatrix}
+$$</p>
+
+<p>then if we define</p>
+
+<p>$$
+A \cong AA \texttt{ and } B \cong BB
+$$</p>
+
+<p>then the following holds:</p>
+
+<p>$$
+A \cdot B \cong AA \cdot BB
+$$</p>
+
+<p>where the &lsquo;dot&rsquo; is matrix multiplication. This pattern holds for larger and smaller matrices alike, pretty cool! Thus, if we&rsquo;re able to build a fully sequential matrix multiplication algorithm (doing exactly one multiplication per time step), we could combine it with our previously built fully parallel one. (Revisit the interactive example, imagining that number are matrices if you want to!). If the sizes of these submatrices would be configurable, we would have essentially built a scalable matrix multiplier. This is exactly what we&rsquo;re going to do.</p>
+
+<p>We first need to slightly modify our <code>Matrix</code> type, so it can store arbitrary data: matrices or integers. We simply extend it as such:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="kr">type</span> <span class="kt">Matrix</span> <span class="n">m</span> <span class="n">n</span> <span class="n">a</span> <span class="ow">=</span> <span class="kt">Vec</span> <span class="n">m</span> <span class="p">(</span><span class="kt">Vec</span> <span class="n">n</span> <span class="n">a</span><span class="p">)</span>
+</code></pre></div>
+
+
+<p>Up to this point, we have been defining functions without timing specifications. That is, it would just compile to a hardware component finishing in a single time step. Timesteps in Clash are modeled using <code>Signal</code>s; an infinite stream of values. Our new function will be defined using these. We will build a component that takes two matrices, calculates the result of their multiplication, and finally returns the result after some time. To distinguish between &ldquo;no input&rdquo; and &ldquo;input&rdquo;, and &ldquo;no output&rdquo; and &ldquo;output&rdquo; we&rsquo;ll wrap them in <code>Maybe</code>.</p>
+
+<p>Finally, before we define our new function, we need a way to talk about the sizes of the various (sub)matrices. The defacto standard in mathematics is to define <code>m</code> as the number of rows, and <code>n</code> as the number of columns. We&rsquo;ll extend this idea in the following way if <code>X</code> is a matrix and <code>X ≅ XX</code>:</p>
+
+<ul>
+<li><code>X_m</code>: number of rows in <code>X</code></li>
+<li><code>X_n</code>: number of columns in <code>X</code></li>
+<li><code>XX_m</code>: number of rows in <code>XX</code> (number of submatrices in vertical direction)</li>
+<li><code>XX_n</code>: number of colums in <code>XX</code> (number of submatrices in horizontal direction)</li>
+<li><code>XX_sm</code>: number of rows in each <em>submatrix</em> of <code>XX</code>.</li>
+<li><code>XX_sn</code>: number of columns in each <em>submatrix</em> of <code>XX</code>.</li>
+</ul>
+
+<p>With that being set up, let&rsquo;s have a look at the type of our new function:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">mmmult2d</span>
+  <span class="ow">::</span> <span class="n">forall</span> <span class="n">a_m</span> <span class="n">a_n</span> <span class="n">b_m</span> <span class="n">b_n</span> <span class="n">aa_m</span> <span class="n">aa_n</span> <span class="n">bb_m</span> <span class="n">bb_n</span> <span class="n">aa_sm</span> <span class="n">aa_sn</span> <span class="n">bb_sm</span> <span class="n">bb_sn</span>
+  <span class="c1">-- ^ Explicit definition of type variables in order to use them in function body</span>
+  
+   <span class="o">.</span> <span class="kt">SystemClockReset</span>
+  <span class="c1">-- ^ Clock and reset lines for registers</span>
+  
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">aa_m</span>
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">aa_n</span>
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">bb_m</span>
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">bb_n</span>
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">aa_sm</span>
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">aa_sn</span>
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">bb_sm</span>
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">bb_sn</span>
+
+  <span class="c1">-- Enforce proper matrix dimensions:</span>
+  <span class="ow">=&gt;</span> <span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">a_m</span>
+  <span class="ow">=&gt;</span> <span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">a_n</span>
+  <span class="ow">=&gt;</span> <span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">b_m</span>
+  <span class="ow">=&gt;</span> <span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">b_n</span>
+  <span class="ow">=&gt;</span> <span class="n">a_n</span> <span class="o">~</span> <span class="n">b_m</span>
+
+  <span class="c1">-- Constrain submatrices:</span>
+  <span class="ow">=&gt;</span> <span class="n">a_m</span> <span class="o">~</span> <span class="p">(</span><span class="n">aa_m</span> <span class="o">*</span> <span class="n">aa_sm</span><span class="p">)</span>
+  <span class="ow">=&gt;</span> <span class="n">a_n</span> <span class="o">~</span> <span class="p">(</span><span class="n">aa_n</span> <span class="o">*</span> <span class="n">aa_sn</span><span class="p">)</span>
+  <span class="ow">=&gt;</span> <span class="n">b_m</span> <span class="o">~</span> <span class="p">(</span><span class="n">bb_m</span> <span class="o">*</span> <span class="n">bb_sm</span><span class="p">)</span>
+  <span class="ow">=&gt;</span> <span class="n">b_n</span> <span class="o">~</span> <span class="p">(</span><span class="n">bb_n</span> <span class="o">*</span> <span class="n">bb_sn</span><span class="p">)</span>
+  <span class="ow">=&gt;</span> <span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">aa_sm</span>
+  <span class="ow">=&gt;</span> <span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">aa_sn</span>
+  <span class="ow">=&gt;</span> <span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">bb_sm</span>
+  <span class="ow">=&gt;</span> <span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">bb_sn</span>
+  <span class="ow">=&gt;</span> <span class="n">bb_sm</span> <span class="o">~</span> <span class="n">aa_sn</span>
+
+  <span class="c1">-- Allow user to pass submatrix sizes:</span>
+  <span class="ow">=&gt;</span> <span class="kt">SNat</span> <span class="n">aa_m</span>
+  <span class="c1">-- ^ Number of rows in submatrix of AA</span>
+  <span class="ow">-&gt;</span> <span class="kt">SNat</span> <span class="n">aa_sn</span>
+  <span class="c1">-- ^ Number of columns in submatrix of AA</span>
+  <span class="ow">-&gt;</span> <span class="kt">SNat</span> <span class="n">bb_n</span>
+  <span class="c1">-- ^ Number of columns in submatrix of BB</span>
+
+  <span class="c1">-- Matrices to multiply:</span>
+  <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="kt">System</span> <span class="p">(</span><span class="kt">Maybe</span> <span class="p">(</span><span class="kt">Matrix</span> <span class="n">a_m</span> <span class="n">a_n</span> <span class="kt">Int</span><span class="p">,</span> <span class="kt">Matrix</span> <span class="n">b_m</span> <span class="n">b_n</span> <span class="kt">Int</span><span class="p">))</span>
+
+  <span class="c1">-- Result returned after calculating for a while:</span>
+  <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="kt">System</span> <span class="p">(</span><span class="kt">Maybe</span> <span class="p">(</span><span class="kt">Matrix</span> <span class="n">a_m</span> <span class="n">b_n</span> <span class="kt">Int</span><span class="p">))</span>
+<span class="nf">mmmult2d</span> <span class="n">aa_sn</span> <span class="n">aa_m</span> <span class="n">bb_n</span> <span class="n">matrixAA</span> <span class="n">matrixb</span> <span class="ow">=</span> <span class="err">…</span>
+</code></pre></div>
+
+
+<p>Almost the whole type signature is taken up by constraints. This might look tedious at first, but it actually helps to prevent a lot of errors such as passing a wrongly dimensioned matrix. We&rsquo;ll later see we <em>could</em> omit the type signatures altogether if we wanted to.</p>
+
+<p>The function boils down to four actual arguments. Three submatrix demensions:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell">  <span class="ow">=&gt;</span> <span class="kt">SNat</span> <span class="n">aa_m</span>
+  <span class="c1">-- ^ Number of rows in submatrix of AA</span>
+  <span class="ow">-&gt;</span> <span class="kt">SNat</span> <span class="n">aa_sn</span>
+  <span class="c1">-- ^ Number of columns in submatrix of AA</span>
+  <span class="ow">-&gt;</span> <span class="kt">SNat</span> <span class="n">bb_n</span>
+  <span class="c1">-- ^ Number of columns in submatrix of BB</span>
+</code></pre></div>
+
+
+<p>And a single argument <em>maybe</em> passing two matrices:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell">  <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="kt">System</span> <span class="p">(</span><span class="kt">Maybe</span> <span class="p">(</span><span class="kt">Matrix</span> <span class="n">a_m</span> <span class="n">a_n</span> <span class="kt">Int</span><span class="p">,</span> <span class="kt">Matrix</span> <span class="n">b_m</span> <span class="n">b_n</span> <span class="kt">Int</span><span class="p">))</span>
+</code></pre></div>
+
+
+<p>We&rsquo;ll later see how to forge signals in order to test our function, and how to use <code>SNat</code>s to pass our desired (sub)matrix demensions.</p>
+
+<p>A lot of the times when we work with <code>Signal</code>s in Clash, it is convenient to express ourselves in terms of Mealy (or Moore) machines. Instead of thinking about a stream of values evolving over time, we&rsquo;d express ourselves in terms of a <em>state</em> and a function applied to that state yielding an updated state and an output. In Mealy machines, both updating and yielding an output is combined into a single function, while Moore separates these into two functions. We&rsquo;ll use the former in this tutorial.</p>
+
+<p>Without resorting to blockrams just yet, at the very least we need to store three things in our state:</p>
+
+<ul>
+<li>The matrices <code>AA</code> and <code>BB</code> given as an input at some earlier point during the computation;</li>
+<li>The partially calculated result matrix <code>RR</code>;</li>
+<li>A counter to keep track of how far we&rsquo;ve progressed.</li>
+</ul>
+
+<p>We could define this counter in many ways. Preferably though, we would like to keep it as simple as possible. Recall an instance of matrix multiplication:</p>
+
+<p>$$
+\begin{bmatrix}
+    a &amp; b \\
+    c &amp; d
+\end{bmatrix} \begin{bmatrix}
+    e &amp; f \\
+    g &amp; h
+\end{bmatrix} = \begin{bmatrix}
+    ae + bg &amp; af + bh \\
+    ce + dg &amp; cf + dh
+\end{bmatrix} = \begin{bmatrix}
+    i &amp; j \\
+    k &amp; l
+\end{bmatrix}
+$$</p>
+
+<p>We could choose to calculate the submatrix multiplications as follows:</p>
+
+<p>$$
+\texttt{ae, ce, af, cf, bg, dg, bh, dh}
+$$</p>
+
+<p>At each timestep, we would therefore read from or write to:</p>
+
+<p>$$
+AA:
+\texttt{a, c, a, c, b, d, b, d} \\ BB:
+\texttt{e, e, f, f, g, g, h, h} \\ RR:
+\texttt{i, k, j, l, i, k, j, l} \<br />
+$$</p>
+
+<p>In this configuration, we could think of the indices indicating the various elements as follows:</p>
+
+<ul>
+<li><code>AA_m</code>: row index increases by one every cycle</li>
+<li><code>BB_n</code>: column index increases after full cycle of <code>AA_m</code></li>
+<li><code>AA_n</code>: column index increases after full cycle of <code>BB_n</code></li>
+<li><code>BB_m</code>: row index increases after full cycle of <code>BB_n</code></li>
+<li><code>RR_m</code>: row index increases by one every cycle</li>
+<li><code>RR_n</code>: column index increases after full cycle of <code>AA_m</code></li>
+</ul>
+
+<p>Therefore, we can express our counter as a triple:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="kr">type</span> <span class="kt">Counter</span> <span class="ow">=</span> <span class="p">(</span><span class="kt">Index</span> <span class="n">aa_n</span><span class="p">,</span> <span class="kt">Index</span> <span class="n">bb_n</span><span class="p">,</span> <span class="kt">Index</span> <span class="n">aa_m</span><span class="p">)</span>
+</code></pre></div>
+
+
+<p>.. counting from right to left, with carry and wrap-around. In case of our <em>2x2</em> example, it would count like:</p>
+
+<p>$$
+(0, 0, 0) \\ (0, 0, 1) \\ (0, 1, 0) \\ (0, 1, 1) \\ (1, 0, 0) \\ \dots
+$$</p>
+
+<p>Allowing us to store the indices of all three matrices as a single triple:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="p">(</span><span class="n">aColI</span><span class="p">,</span>  <span class="kr">_</span><span class="p">,</span>     <span class="n">aRowI</span><span class="p">)</span> <span class="ow">=</span> <span class="n">counter</span>
+<span class="p">(</span><span class="n">bRowI</span><span class="p">,</span>  <span class="n">bColI</span><span class="p">,</span> <span class="kr">_</span>    <span class="p">)</span> <span class="ow">=</span> <span class="n">counter</span>
+<span class="p">(</span><span class="kr">_</span><span class="p">,</span>      <span class="n">rColI</span><span class="p">,</span> <span class="n">rRowI</span><span class="p">)</span> <span class="ow">=</span> <span class="n">counter</span>
+</code></pre></div>
+
+
+<p>Implementations for this counter (for tuples, triples, quadtuples, ..) have been given in <code>Clash.Blog.MM.WrapCount</code>. Convenience functions for matrices can be found in <code>Clash.Blog.MM.Matrix</code>. Implementations are out of scope for this blogpost, but you&rsquo;re welcome to check them out by cloning the repository given in the introduction.</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="kr">import</span> <span class="nn">Clash.Blog.MM.Matrix</span>
+<span class="kr">import</span> <span class="nn">Clash.Blog.MM.WrapCount</span>
+</code></pre></div>
+
+
+<p>With all this said, we can finally start implementing <code>mmmult2d</code>. Because we decided to use <a href="https://hackage.haskell.org/package/clash-prelude-0.99.2/docs/Clash-Prelude-Mealy.html"><code>mealy</code></a>, we&rsquo;ll let <code>mmmult2d</code> set the stage: setup an initial state for the mealy machine, and split the input matrices into congruent matrices with submatrices:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">mmmult2d</span> <span class="n">aa_sn</span> <span class="n">aa_m</span> <span class="n">bb_n</span> <span class="n">ab</span> <span class="ow">=</span>
+  <span class="n">mealy</span> <span class="n">mmmult2dmealy</span> <span class="n">state</span> <span class="n">ab&#39;</span>
+    <span class="kr">where</span>
+      <span class="c1">-- Take input matrices, and split them into smaller ones. The outer fmap</span>
+      <span class="c1">-- maps over each value in the signal, the inner fmap applies the function</span>
+      <span class="c1">-- `splitab` on the inner value of Maybe (if it is not Nothing).</span>
+      <span class="n">ab&#39;</span> <span class="ow">=</span> <span class="n">fmap</span> <span class="p">(</span><span class="n">fmap</span> <span class="n">splitab</span><span class="p">)</span> <span class="n">ab</span>
+        
+      <span class="c1">-- Initial state for mealy machine:</span>
+      <span class="n">state</span> <span class="ow">=</span> 
+        <span class="p">(</span> <span class="kt">Nothing</span>                <span class="c1">-- No matrices saved yet</span>
+        <span class="p">,</span> <span class="n">minBound</span>               <span class="c1">-- Counter at zero</span>
+        <span class="p">,</span> <span class="n">emptyMatrix</span> <span class="n">nullMatrix</span> <span class="c1">-- Matrix with zero-matrices</span>
+        <span class="p">)</span>
+      
+      <span class="c1">-- Split matrices into matrix with submatrices</span>
+      <span class="n">splitab</span> <span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span> <span class="ow">=</span> 
+        <span class="p">(</span> <span class="n">msplit</span> <span class="n">a</span> <span class="ow">::</span> <span class="kt">Matrix</span> <span class="n">aa_m</span> <span class="n">aa_n</span> <span class="p">(</span><span class="kt">Matrix</span> <span class="n">aa_sm</span> <span class="n">aa_sn</span> <span class="kt">Int</span><span class="p">)</span>
+        <span class="p">,</span> <span class="n">msplit</span> <span class="n">b</span> <span class="ow">::</span> <span class="kt">Matrix</span> <span class="n">bb_m</span> <span class="n">bb_n</span> <span class="p">(</span><span class="kt">Matrix</span> <span class="n">bb_sm</span> <span class="n">bb_sn</span> <span class="kt">Int</span><span class="p">)</span>
+        <span class="p">)</span>
+</code></pre></div>
+
+
+<p>All that&rsquo;s left now is to implement the mealy machine doing the actual calculation. Our mealy machine, <code>mmmult2dmealy</code>, matches on three distinct cases:</p>
+
+<ol>
+<li>No input, no matrices stored; do nothing.</li>
+<li>Input given; resets counter and stores matrices given as input.</li>
+<li>Otherwise; calculate. Pick off at the point indicated by the indices.</li>
+</ol>
+
+<p>Notice that the following implementation does not have an explicit type. Clash will infer its type simply by the function&rsquo;s definition, including size constraints:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="c1">-- | Same as (!!) but guaranteed to succeed as any </span>
+<span class="c1">-- value in `Index n` can never exceed `n-1`.</span>
+<span class="nf">index</span>
+  <span class="ow">::</span> <span class="kt">KnownNat</span> <span class="n">n</span>
+  <span class="ow">=&gt;</span> <span class="kt">Vec</span> <span class="n">n</span> <span class="n">a</span>
+  <span class="ow">-&gt;</span> <span class="kt">Index</span> <span class="n">n</span>
+  <span class="ow">-&gt;</span> <span class="n">a</span>
+<span class="nf">index</span> <span class="ow">=</span> <span class="p">(</span><span class="o">!!</span><span class="p">)</span>
+
+<span class="c1">-- | mmmult2dmealy describes a single caclulation step. It returns a result only</span>
+<span class="c1">-- when it&#39;s ready. To be used as mealy machine.</span>
+<span class="nf">mmmult2dmealy</span> <span class="p">(</span><span class="kt">Nothing</span><span class="p">,</span> <span class="kr">_</span><span class="p">,</span> <span class="kr">_</span><span class="p">)</span> <span class="kt">Nothing</span> <span class="ow">=</span>
+  <span class="c1">-- No input nor state, do nothing:</span>
+  <span class="p">((</span><span class="kt">Nothing</span><span class="p">,</span> <span class="n">minBound</span><span class="p">,</span> <span class="n">emptyMatrix</span> <span class="n">nullMatrix</span><span class="p">),</span> <span class="kt">Nothing</span><span class="p">)</span>
+
+<span class="nf">mmmult2dmealy</span> <span class="kr">_</span> <span class="n">matrices</span><span class="o">@</span><span class="p">(</span><span class="kt">Just</span> <span class="kr">_</span><span class="p">)</span> <span class="ow">=</span>
+  <span class="c1">-- Input; reset progress so far (if any)</span>
+  <span class="p">((</span><span class="n">matrices</span><span class="p">,</span> <span class="n">minBound</span><span class="p">,</span> <span class="n">emptyMatrix</span> <span class="n">nullMatrix</span><span class="p">),</span> <span class="kt">Nothing</span><span class="p">)</span>
+    
+<span class="nf">mmmult2dmealy</span> <span class="p">(</span><span class="n">matrices</span><span class="o">@</span><span class="p">(</span><span class="kt">Just</span> <span class="p">(</span><span class="n">matrixAA</span><span class="p">,</span> <span class="n">matrixBB</span><span class="p">)),</span> <span class="n">counter</span><span class="p">,</span> <span class="n">matrixRR</span><span class="p">)</span> <span class="kr">_</span> <span class="ow">=</span> <span class="p">(</span><span class="n">state&#39;</span><span class="p">,</span> <span class="n">output</span><span class="p">)</span>
+  <span class="c1">-- Continue calculating, return result if ready</span>
+  <span class="kr">where</span>
+    <span class="c1">-- If we&#39;re at the counter&#39;s maximum, we&#39;re done after this cycle</span>
+    <span class="n">done</span> <span class="ow">=</span> <span class="n">counter</span> <span class="o">==</span> <span class="n">maxBound</span>
+
+    <span class="c1">-- Increase counter tuple by one. Wrap around if maximum is reached.</span>
+    <span class="n">counter&#39;</span> <span class="ow">=</span> <span class="n">succWrap</span> <span class="n">counter</span>
+  
+    <span class="c1">-- Calculate new state; if we&#39;re done, reset it.</span>
+    <span class="n">state&#39;</span>
+      <span class="o">|</span> <span class="n">done</span>      <span class="ow">=</span> <span class="p">(</span><span class="kt">Nothing</span><span class="p">,</span>  <span class="n">counter&#39;</span><span class="p">,</span> <span class="n">emptyMatrix</span> <span class="n">nullMatrix</span><span class="p">)</span>
+      <span class="o">|</span> <span class="n">otherwise</span> <span class="ow">=</span> <span class="p">(</span><span class="n">matrices</span><span class="p">,</span> <span class="n">counter&#39;</span><span class="p">,</span> <span class="n">matrixRR&#39;</span><span class="p">)</span>
+      
+    <span class="c1">-- Output only if we&#39;re done calculating</span>
+    <span class="n">output</span>
+      <span class="o">|</span> <span class="n">done</span>      <span class="ow">=</span> <span class="kt">Just</span> <span class="p">(</span><span class="n">mmerge</span> <span class="n">matrixRR&#39;</span><span class="p">)</span>
+      <span class="o">|</span> <span class="n">otherwise</span> <span class="ow">=</span> <span class="kt">Nothing</span>
+      
+    <span class="c1">-- Determine order of fetching from A or B and storing it in R.</span>
+    <span class="p">(</span><span class="n">aColI</span><span class="p">,</span>  <span class="kr">_</span><span class="p">,</span>     <span class="n">aRowI</span><span class="p">)</span> <span class="ow">=</span> <span class="n">counter</span>
+    <span class="p">(</span><span class="n">bRowI</span><span class="p">,</span>  <span class="n">bColI</span><span class="p">,</span> <span class="kr">_</span>    <span class="p">)</span> <span class="ow">=</span> <span class="n">counter</span>
+    <span class="p">(</span><span class="kr">_</span><span class="p">,</span>      <span class="n">rColI</span><span class="p">,</span> <span class="n">rRowI</span><span class="p">)</span> <span class="ow">=</span> <span class="n">counter</span>
+    
+    <span class="c1">-- Fetch submatrices and partial result</span>
+    <span class="n">subA</span> <span class="ow">=</span> <span class="p">(</span><span class="n">matrixAA</span> <span class="p">`</span><span class="n">index</span><span class="p">`</span> <span class="n">aRowI</span><span class="p">)</span> <span class="p">`</span><span class="n">index</span><span class="p">`</span> <span class="n">aColI</span>
+    <span class="n">subB</span> <span class="ow">=</span> <span class="p">(</span><span class="n">matrixBB</span> <span class="p">`</span><span class="n">index</span><span class="p">`</span> <span class="n">bRowI</span><span class="p">)</span> <span class="p">`</span><span class="n">index</span><span class="p">`</span> <span class="n">bColI</span>
+    <span class="n">subR</span> <span class="ow">=</span> <span class="p">(</span><span class="n">matrixRR</span> <span class="p">`</span><span class="n">index</span><span class="p">`</span> <span class="n">rRowI</span><span class="p">)</span> <span class="p">`</span><span class="n">index</span><span class="p">`</span> <span class="n">rColI</span>
+    
+    <span class="c1">-- Calculate new partial result, store it in matrix R</span>
+    <span class="n">subR&#39;</span>     <span class="ow">=</span> <span class="n">madd</span> <span class="n">subR</span> <span class="p">(</span><span class="n">mmMult</span> <span class="n">subA</span> <span class="n">subB</span><span class="p">)</span>
+    <span class="n">matrixRR&#39;</span> <span class="ow">=</span> <span class="n">replaceMatrixElement</span> <span class="n">matrixRR</span> <span class="n">rRowI</span> <span class="n">rColI</span> <span class="n">subR&#39;</span>
+</code></pre></div>
+
+
+<p>And that&rsquo;s it for implementing a scalable matrix multiplier. To summarize: we can multiply matrices of any size and choose the number of integer multipliers by adjusting the size of the submatrices.</p>
+
+<h3 id="pipelining-dot">Pipelining <code>dot</code></h3>
+
+<p>Any circuit&rsquo;s performance is determined by its critical path: the path between two registers incurring the maximum delay in the whole circuit. In the circuit developed so far we&rsquo;re still using the matrix multiplication from the very first part of this blogpost. This chains multiple multiply-add operations together, clearly inducing a very long path:</p>
+
+<p><img style="margin-left:30%; margin-right:30%;" width="40%" src="images/01-dot.svg" /></p>
+
+<p>Simply adding a register after each <code>f</code> would greatly reduce the length of the critical path. This however changes the behavior of the circuit significantly, as the output of the first <code>f</code> would only be present at the input of the second <code>f</code> at timestep <em>t+1</em>, while the other inputs of the second <code>f</code> still arrive at <em>t+0</em>. Instead, we need to add registers to the inputs of every <code>f</code>, progressively more further down the pipeline, as such:</p>
+
+<p><img style="margin-left:25%; margin-right:25%;" width="50%" src="images/02-dot.svg" /></p>
+
+<p>This new dot-operator would functionally behave the same way as its non-pipelined counterpart, bar a delay between in the input and output. Clash allows us to model this kind of behavior with <a href="https://hackage.haskell.org/package/clash-prelude-0.99.2/docs/Clash-Signal-Delayed.html#t:DSignal">delayed signals</a>. Let&rsquo;s first consider the definition of a non-delayed multiply-add as displayed in the first image:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">multiplyAdd</span>
+  <span class="ow">::</span> <span class="kt">SystemClockReset</span>
+  <span class="ow">=&gt;</span> <span class="kt">Signal</span> <span class="kt">System</span> <span class="p">(</span><span class="kt">Int</span><span class="p">,</span> <span class="kt">Int</span><span class="p">)</span>
+  <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="kt">System</span> <span class="kt">Int</span>
+  <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="kt">System</span> <span class="kt">Int</span>
+<span class="nf">multiplyAdd</span> <span class="n">ab</span> <span class="n">c</span> <span class="ow">=</span>
+  <span class="n">c</span> <span class="o">+</span> <span class="n">a</span><span class="o">*</span><span class="n">b</span>
+    <span class="kr">where</span>
+      <span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span> <span class="ow">=</span> <span class="n">unbundle</span> <span class="n">ab</span>
+</code></pre></div>
+
+
+<p>Pretty straightforward, hopefully. It&rsquo;s a bit more complicated than vanilla Haskell thanks to the use of <code>Signal</code>s and tuples therein. We&rsquo;ll later see why we used a tuple in the first place. For now, let&rsquo;s focus on implementing <code>dot</code> using <code>multiplyAdd</code>. Using <code>Signal</code>s obfuscates it a bit, but <code>multiplyAdd</code> is in fact of the form <code>a -&gt; b -&gt; b</code> making it suitable for a simple <code>foldr</code>.</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">dot</span>
+  <span class="ow">::</span> <span class="kt">SystemClockReset</span>
+  <span class="ow">=&gt;</span> <span class="kt">Signal</span> <span class="kt">System</span> <span class="p">(</span><span class="kt">Vec</span> <span class="n">n</span> <span class="kt">Int</span><span class="p">)</span>
+  <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="kt">System</span> <span class="p">(</span><span class="kt">Vec</span> <span class="n">n</span> <span class="kt">Int</span><span class="p">)</span>
+  <span class="ow">-&gt;</span> <span class="kt">Signal</span> <span class="kt">System</span> <span class="kt">Int</span> 
+<span class="nf">dot</span> <span class="n">a</span> <span class="n">b</span> <span class="ow">=</span> 
+  <span class="n">foldr</span> <span class="n">multiplyAdd</span> <span class="p">(</span><span class="n">pure</span> <span class="mi">0</span><span class="p">)</span> <span class="n">ab</span>
+    <span class="kr">where</span>
+      <span class="c1">-- &lt;$&gt; is another notation for fmap. fmapping zip over a signal leaves</span>
+      <span class="c1">-- a signal of 1-argument functions. To apply an argument within the</span>
+      <span class="c1">-- signal use we use &lt;*&gt;. This is a common pattern in Clash.</span>
+      <span class="n">ab</span> <span class="ow">::</span> <span class="kt">Vec</span> <span class="n">n</span> <span class="p">(</span><span class="kt">Signal</span> <span class="kt">System</span> <span class="p">(</span><span class="kt">Int</span><span class="p">,</span> <span class="kt">Int</span><span class="p">))</span>
+      <span class="n">ab</span> <span class="ow">=</span> <span class="n">unbundle</span> <span class="o">$</span> <span class="n">zip</span> <span class="o">&lt;$&gt;</span> <span class="n">a</span> <span class="o">&lt;*&gt;</span> <span class="n">b</span> 
+</code></pre></div>
+
+
+<p>So far so good. So what about the registers? Inserting a single a single register after each multiply-add is relatively easy using delayed signals and the function <a href="https://hackage.haskell.org/package/clash-prelude-0.99.2/docs/Clash-Explicit-Signal-Delayed.html#v:delayed"><code>delayed</code></a>, which will insert enough registers to match its type context. In our case, this is single register inferred by calculating <code>(n + 1) - n ~ 1</code>.</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">dMultiplyAdd</span>
+  <span class="ow">::</span> <span class="kt">SystemClockReset</span>
+  <span class="ow">=&gt;</span> <span class="kt">DSignal</span> <span class="kt">System</span> <span class="n">n</span>     <span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">a</span><span class="p">)</span>
+  <span class="ow">-&gt;</span> <span class="kt">DSignal</span> <span class="kt">System</span> <span class="n">n</span>     <span class="n">a</span>
+  <span class="ow">-&gt;</span> <span class="kt">DSignal</span> <span class="kt">System</span> <span class="p">(</span><span class="n">n</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span> <span class="n">a</span>
+<span class="nf">dMultiplyAdd</span> <span class="n">ab</span> <span class="n">c</span> <span class="ow">=</span>
+  <span class="n">delayed</span> <span class="p">(</span><span class="n">repeat</span> <span class="mi">0</span><span class="p">)</span> <span class="n">result</span>
+    <span class="kr">where</span>
+      <span class="n">result</span> <span class="ow">=</span> <span class="n">c</span> <span class="o">+</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span>
+      <span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span> <span class="ow">=</span> <span class="n">unbundle</span> <span class="n">ab</span>
+</code></pre></div>
+
+
+<p>Unfortunately, we just broke our definition of <code>dot</code>. The delayed version of <code>multiplyAdd</code>, <code>dMultiplyAdd</code>, is of the form <code>a -&gt; b -&gt; c</code> due to differing delays between the two arguments and the result. Still, in this case we could use the result of type <code>c</code> as a second argument to another application of <code>dMultiplyAdd</code>. In fact, if we would manually unroll the definition of <code>foldr</code> in <code>dot</code>, we would end up with a perfectly fine Haskell program! Of course, we cannot, since we do not know the number of times we would have to unroll it when writing the function. It could be three times, it could be a thousand, depending on the context.</p>
+
+<p>Luckily, Clash offers a way out: <a href="https://hackage.haskell.org/package/clash-prelude-0.99.2/docs/Clash-Sized-Vector.html#v:dfold">dependently typed folds</a>. Dependently typed folds can help whenever one wants to fold a function <code>g :: a -&gt; b -&gt; c</code>, where <code>g a c</code> would type-check. <code>dfold</code> asks its users two things:</p>
+
+<ol>
+<li><p>To provide a <a href="https://hackage.haskell.org/package/singletons-2.2/docs/Data-Singletons.html#t:TyFun">type-level function</a> function which, given the an index <em>l</em>, provides the type for a circuit folded <em>l</em> times.</p></li>
+
+<li><p>To provide a function (<code>go</code>) which is given three things: [1] an <code>SNat</code> indicating how far <code>dfold</code> is in the folding process;  [2] the <code>l</code><sup>th</sup> element of the vector given to <code>dfold</code>; and [3] the output of the <code>l-1</code><sup>th</sup> application of <code>go</code>. The function should return something of the type predicted by the type level function.</p></li>
+</ol>
+
+<p>Given this, it promises us a type-checking construct.</p>
+
+<p>Type level functions can be implemented by providing an <a href="https://hackage.haskell.org/package/singletons-2.2/docs/Data-Singletons.html#t:Apply"><code>Apply</code></a> instance for it. Instances need a specific type we can match on, so we’ll build a new one:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="kr">data</span> <span class="kt">MultAddFoldedTypeGen</span> <span class="p">(</span><span class="n">n</span> <span class="ow">::</span> <span class="kt">Nat</span><span class="p">)</span> <span class="p">(</span><span class="n">f</span> <span class="ow">::</span> <span class="kt">TyFun</span> <span class="kt">Nat</span> <span class="o">*</span><span class="p">)</span> <span class="ow">::</span> <span class="o">*</span>
+</code></pre></div>
+
+
+<p>We don’t care about a runtime representation, so we’ll skip an actual implementation. <code>n</code> corresponds to the delay our function starts with even before folding the given function even once. <code>f</code> represents the function taking an integer <code>l</code> and returning whatever type we wish: <code>*</code> (read <code>f :: TyFun Nat *</code> as <code>f :: Nat -&gt; *</code>). We can see the <code>l</code> being used in the instance:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="kr">type</span> <span class="kr">instance</span> <span class="kt">Apply</span> <span class="p">(</span><span class="kt">MultAddFoldedTypeGen</span> <span class="n">n</span><span class="p">)</span> <span class="n">l</span> <span class="ow">=</span>
+  <span class="kt">DSignal</span> <span class="kt">System</span> <span class="p">(</span><span class="n">n</span> <span class="o">+</span> <span class="n">l</span><span class="p">)</span> <span class="kt">Int</span>
+</code></pre></div>
+
+
+<p>As <code>dMultiplyAdd</code> incurs a delay of 1 and starts with a delay <code>n</code>, the delay after folding <code>l</code> times is <code>n + l</code>. This concludes the first part required for <code>dfold</code>. For the second part, we need to implement a function chaining two parts of the pipeline together:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">go</span>
+  <span class="ow">::</span> <span class="kt">SystemClockReset</span>
+  <span class="ow">=&gt;</span> <span class="kt">SNat</span> <span class="n">l</span>
+  <span class="c1">-- ^ Number of times folded already</span>
+  <span class="ow">-&gt;</span> <span class="kt">DSignal</span> <span class="kt">System</span> <span class="n">d</span> <span class="p">(</span><span class="kt">Int</span><span class="p">,</span> <span class="kt">Int</span><span class="p">)</span>
+  <span class="c1">-- ^ Tuple to be multiplied</span>
+  <span class="ow">-&gt;</span> <span class="kt">DSignal</span> <span class="kt">System</span> <span class="p">(</span><span class="n">d</span> <span class="o">+</span> <span class="n">l</span><span class="p">)</span> <span class="kt">Int</span>
+  <span class="c1">-- ^ Input from previous element in pipeline</span>
+  <span class="ow">-&gt;</span> <span class="kt">DSignal</span> <span class="kt">System</span> <span class="p">(</span><span class="n">d</span> <span class="o">+</span> <span class="n">l</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="kt">Int</span>
+<span class="nf">go</span> <span class="p">(</span><span class="n">l</span><span class="o">@</span><span class="kt">SNat</span><span class="p">)</span> <span class="n">ab</span> <span class="n">c</span> <span class="ow">=</span>
+  <span class="n">dMultiplyAdd</span> <span class="p">(</span><span class="n">delayed</span> <span class="p">(</span><span class="n">repeat</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span> <span class="n">ab</span><span class="p">)</span> <span class="n">c</span>
+</code></pre></div>
+
+
+<p>Finally, we can use our type level function <code>MultAddFoldedTypeGen</code> and glue function <code>go</code> in an application of <code>dfold</code> as such:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="c1">-- | Pipelined version of dot</span>
+<span class="nf">dotf</span>
+  <span class="ow">::</span> <span class="n">forall</span> <span class="n">d</span> <span class="n">n</span>
+   <span class="o">.</span> <span class="kt">SystemClockReset</span>
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">n</span>
+  <span class="ow">=&gt;</span> <span class="kt">DSignal</span> <span class="kt">System</span> <span class="n">d</span>       <span class="p">(</span><span class="kt">Vec</span> <span class="n">n</span> <span class="kt">Int</span><span class="p">)</span>
+  <span class="ow">-&gt;</span> <span class="kt">DSignal</span> <span class="kt">System</span> <span class="n">d</span>       <span class="p">(</span><span class="kt">Vec</span> <span class="n">n</span> <span class="kt">Int</span><span class="p">)</span>
+  <span class="ow">-&gt;</span> <span class="kt">DSignal</span> <span class="kt">System</span> <span class="p">(</span><span class="n">d</span> <span class="o">+</span> <span class="n">n</span><span class="p">)</span> <span class="kt">Int</span>
+<span class="nf">dotf</span> <span class="n">a</span> <span class="n">b</span> <span class="ow">=</span>
+  <span class="n">dfold</span>
+    <span class="c1">-- Type level function to supply type of /l/th folding</span>
+    <span class="p">(</span><span class="kt">Proxy</span> <span class="ow">::</span> <span class="kt">Proxy</span> <span class="p">(</span><span class="kt">MultAddFoldedTypeGen</span> <span class="n">d</span><span class="p">))</span>
+    <span class="c1">-- Chain function:</span>
+    <span class="n">go</span>
+    <span class="c1">-- Start value of pipeline:</span>
+    <span class="p">(</span><span class="n">pure</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="c1">-- Every processing element gets an external input:</span>
+    <span class="p">(</span><span class="kt">DBundle</span><span class="o">.</span><span class="n">unbundle</span> <span class="o">$</span> <span class="n">zip</span> <span class="o">&lt;$&gt;</span> <span class="n">a</span> <span class="o">&lt;*&gt;</span> <span class="n">b</span><span class="p">)</span>
+    
+  <span class="kr">where</span>
+    <span class="n">go</span> <span class="ow">=</span> <span class="o">...</span>
+</code></pre></div>
+
+
+<p>Although this journey so far has given us great insight into how Clash handles types and how to manually build pipelines, it feels like this should have been handled by higher-order functions in the first place. In the source code of this blog you&rsquo;ll therefore find a slightly other version, where our pipelining has been generalized as two functions <code>foldrp</code> and <code>foldrpp</code>. In the source code you&rsquo;ll therefore find a much simpler implementation of <code>dotf</code>:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">dotf</span>
+  <span class="ow">::</span> <span class="kt">SystemClockReset</span>
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">n</span>
+  <span class="ow">=&gt;</span> <span class="kt">DSignal</span> <span class="kt">System</span> <span class="n">d</span>       <span class="p">(</span><span class="kt">Vec</span> <span class="n">n</span> <span class="kt">Int</span><span class="p">)</span>
+  <span class="ow">-&gt;</span> <span class="kt">DSignal</span> <span class="kt">System</span> <span class="n">d</span>       <span class="p">(</span><span class="kt">Vec</span> <span class="n">n</span> <span class="kt">Int</span><span class="p">)</span>
+  <span class="ow">-&gt;</span> <span class="kt">DSignal</span> <span class="kt">System</span> <span class="p">(</span><span class="n">d</span> <span class="o">+</span> <span class="n">n</span><span class="p">)</span> <span class="kt">Int</span>
+<span class="nf">dotf</span> <span class="n">a</span> <span class="n">b</span> <span class="ow">=</span>
+  <span class="n">foldrp</span>
+    <span class="c1">-- Function:</span>
+    <span class="p">(</span><span class="nf">\</span><span class="p">(</span><span class="n">a&#39;</span><span class="p">,</span> <span class="n">b&#39;</span><span class="p">)</span> <span class="n">c</span> <span class="ow">-&gt;</span> <span class="n">a&#39;</span><span class="o">*</span><span class="n">b&#39;</span> <span class="o">+</span> <span class="n">c</span><span class="p">)</span>
+    <span class="c1">-- Defaults for output/input of function:</span>
+    <span class="mi">0</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="c1">-- Vector to fold over:</span>
+    <span class="p">(</span><span class="n">zip</span> <span class="o">&lt;$&gt;</span> <span class="n">a</span> <span class="o">&lt;*&gt;</span> <span class="n">b</span><span class="p">)</span>
+    <span class="c1">-- Start value:</span>
+    <span class="p">(</span><span class="n">pure</span> <span class="mi">0</span><span class="p">)</span>
+</code></pre></div>
+
+
+<p>To summarize, we built a pipelined version of <code>dot</code> with the help of delayed signals. We used type level functions to express our type evolving when unfolding our use of <code>foldr</code>. Lastly, we built saw the use of higher-order functions - in this case <code>foldrp</code> - can immensely help easy of implementation and readability.</p>
+
+<h3 id="putting-it-together-again">Putting it together again</h3>
+
+<p>We can&rsquo;t use <code>dotf</code> in our definition of <code>mmmult2dmealy</code> anymore, as the former is described at a signal level, while the latter is described at a value level. A strategy to handle this is to make multiple mealy machines, chained together in a combining function. In our case, we would designate a component with producing the right input for our <code>dotf</code> function, and another component processing the results of that pipeline:</p>
+
+<p><img style="margin-left:25%; margin-right:25%;" width="50%" src="images/03-dot.svg" /></p>
+
+<p>Our new function <code>mmmult2dreader</code> is an almost exact copy of our previously defined mealy machine. Instead of doing matrix multiplications though, it produces rows and columns fed to <code>dotf</code>:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="c1">-- | mmmult2dreader stores (sub)matrices and yields a row/column of a submatrix</span>
+<span class="c1">-- every cycle.</span>
+<span class="nf">mmmult2dreader</span> <span class="p">(</span><span class="kt">Nothing</span><span class="p">,</span> <span class="kr">_</span><span class="p">)</span> <span class="kt">Nothing</span> <span class="ow">=</span>
+  <span class="c1">-- No input nor state, do nothing:</span>
+  <span class="p">((</span><span class="kt">Nothing</span><span class="p">,</span> <span class="n">minBound</span><span class="p">),</span> <span class="kt">Nothing</span><span class="p">)</span>
+
+<span class="nf">mmmult2dreader</span> <span class="kr">_</span> <span class="n">matrices</span><span class="o">@</span><span class="p">(</span><span class="kt">Just</span> <span class="kr">_</span><span class="p">)</span> <span class="ow">=</span>
+  <span class="c1">-- Input; reset progress so far (if any)</span>
+  <span class="p">((</span><span class="n">matrices</span><span class="p">,</span> <span class="n">minBound</span><span class="p">),</span> <span class="kt">Nothing</span><span class="p">)</span>
+    
+<span class="nf">mmmult2dreader</span> <span class="p">(</span><span class="n">matrices</span><span class="o">@</span><span class="p">(</span><span class="kt">Just</span> <span class="p">(</span><span class="n">matrixAA</span><span class="p">,</span> <span class="n">matrixBB</span><span class="p">)),</span> <span class="n">counter</span><span class="p">)</span> <span class="kr">_</span> <span class="ow">=</span>
+  <span class="c1">-- Continue calculating, return result if ready.</span>
+  <span class="p">(</span><span class="n">state&#39;</span><span class="p">,</span> <span class="kt">Just</span> <span class="p">(</span><span class="n">rowA</span><span class="p">,</span> <span class="n">colB</span><span class="p">))</span>
+    <span class="kr">where</span>
+      <span class="c1">-- Calculate new state; if we&#39;re done, reset it.</span>
+      <span class="n">state&#39;</span>
+        <span class="o">|</span> <span class="n">counter</span> <span class="o">==</span> <span class="n">maxBound</span> <span class="ow">=</span> <span class="p">(</span><span class="kt">Nothing</span><span class="p">,</span>  <span class="n">succWrap</span> <span class="n">counter</span><span class="p">)</span>
+        <span class="o">|</span> <span class="n">otherwise</span>           <span class="ow">=</span> <span class="p">(</span><span class="n">matrices</span><span class="p">,</span> <span class="n">succWrap</span> <span class="n">counter</span><span class="p">)</span>
+
+      <span class="c1">-- Determine order of fetching from A or B and storing it in R.</span>
+      <span class="p">(</span><span class="n">aColI</span><span class="p">,</span>  <span class="kr">_</span><span class="p">,</span>     <span class="n">aRowI</span><span class="p">,</span> <span class="n">saRowI</span><span class="p">,</span> <span class="kr">_</span><span class="p">)</span>      <span class="ow">=</span> <span class="n">counter</span>
+      <span class="p">(</span><span class="n">bRowI</span><span class="p">,</span>  <span class="n">bColI</span><span class="p">,</span> <span class="kr">_</span><span class="p">,</span>     <span class="kr">_</span><span class="p">,</span>      <span class="n">sbColI</span><span class="p">)</span> <span class="ow">=</span> <span class="n">counter</span>
+
+      <span class="c1">-- Fetch submatrices and their row/column</span>
+      <span class="n">subA</span> <span class="ow">=</span> <span class="p">(</span><span class="n">matrixAA</span> <span class="p">`</span><span class="n">index</span><span class="p">`</span> <span class="n">aRowI</span><span class="p">)</span> <span class="p">`</span><span class="n">index</span><span class="p">`</span> <span class="n">aColI</span>
+      <span class="n">subB</span> <span class="ow">=</span> <span class="p">(</span><span class="n">matrixBB</span> <span class="p">`</span><span class="n">index</span><span class="p">`</span> <span class="n">bRowI</span><span class="p">)</span> <span class="p">`</span><span class="n">index</span><span class="p">`</span> <span class="n">bColI</span>
+      <span class="n">rowA</span> <span class="ow">=</span> <span class="n">subA</span>                     <span class="p">`</span><span class="n">index</span><span class="p">`</span> <span class="n">saRowI</span>
+      <span class="n">colB</span> <span class="ow">=</span> <span class="p">(</span><span class="n">transpose</span> <span class="n">subB</span><span class="p">)</span>         <span class="p">`</span><span class="n">index</span><span class="p">`</span> <span class="n">sbColI</span>
+</code></pre></div>
+
+
+<p>Now that our reader function yields <code>Maybe</code> results, we need to change our pipelined dot function to process (and produce) <code>Maybe</code> values as well, which we present below. Note that we use <code>undefined</code> as an equivalent of <code>xxxx</code> in VHDL/Verilog. In fact, this is exactly what the Clash compiler will produce. If all is well though, both our runtime and hardware will never actually use this result. To improve error reporting on runtime we could replace <code>undefined</code> with <code>error &quot;some message&quot;</code>. Be careful to only use this for values you&rsquo;re convince your code will never use, as an error has simply no meaning on hardware.</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="nf">dotfm</span>
+  <span class="ow">::</span> <span class="kt">SystemClockReset</span>
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">n</span>
+  <span class="ow">=&gt;</span> <span class="kt">DSignal</span> <span class="kt">System</span> <span class="n">d</span>       <span class="p">(</span><span class="kt">Maybe</span> <span class="p">(</span><span class="kt">Vec</span> <span class="n">n</span> <span class="kt">Int</span><span class="p">,</span> <span class="kt">Vec</span> <span class="n">n</span> <span class="kt">Int</span><span class="p">))</span>
+  <span class="ow">-&gt;</span> <span class="kt">DSignal</span> <span class="kt">System</span> <span class="p">(</span><span class="n">d</span> <span class="o">+</span> <span class="n">n</span><span class="p">)</span> <span class="p">(</span><span class="kt">Maybe</span> <span class="kt">Int</span><span class="p">)</span>
+<span class="nf">dotfm</span> <span class="n">ab</span> <span class="ow">=</span>
+  <span class="n">foldrp</span>
+    <span class="c1">-- Function:</span>
+    <span class="n">multAdd</span>
+    <span class="c1">-- Defaults for output/input of function:</span>
+    <span class="kt">Nothing</span> <span class="n">undefined</span>
+    <span class="c1">-- Vector to fold over:</span>
+    <span class="p">(</span><span class="n">uncurry</span> <span class="n">zip</span> <span class="o">.</span> <span class="n">fromJust</span> <span class="o">&lt;$&gt;</span> <span class="n">ab</span><span class="p">)</span>
+    <span class="c1">-- Start value; Nothing on no input, Just 0 on input:</span>
+    <span class="p">((</span><span class="n">const</span> <span class="mi">0</span> <span class="o">&lt;$&gt;</span><span class="p">)</span> <span class="o">&lt;$&gt;</span> <span class="n">ab</span><span class="p">)</span>
+
+  <span class="kr">where</span>
+    <span class="n">multAdd</span> <span class="kr">_</span>      <span class="kt">Nothing</span>  <span class="ow">=</span> <span class="kt">Nothing</span>
+    <span class="n">multAdd</span> <span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span> <span class="p">(</span><span class="kt">Just</span> <span class="n">c</span><span class="p">)</span> <span class="ow">=</span> <span class="kt">Just</span> <span class="o">$</span> <span class="n">a</span><span class="o">*</span><span class="n">b</span> <span class="o">+</span> <span class="n">c</span>
+</code></pre></div>
+
+
+<p>The last component we need to write is the component processing the output of our pipelined dot function. This component closely mirrors the structure of our reader. It resets its state if it does not receive an input, and yields its results as soon as it has gathered enough results from the dot function.</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="c1">-- | mmmult2dwriter stores result (sub)matrices and processes results from</span>
+<span class="c1">-- the dotf pipeline. It yields results whenever it has gathered enough results.</span>
+<span class="nf">mmmult2dwriter</span> <span class="kr">_</span> <span class="kt">Nothing</span> <span class="ow">=</span>
+  <span class="c1">-- No input, reset state</span>
+  <span class="p">((</span><span class="n">emptyMatrix</span> <span class="n">nullMatrix</span><span class="p">,</span> <span class="n">minBound</span><span class="p">),</span> <span class="kt">Nothing</span><span class="p">)</span>
+
+<span class="nf">mmmult2dwriter</span> <span class="p">(</span><span class="n">matrixRR</span><span class="p">,</span> <span class="n">counter</span><span class="p">)</span> <span class="p">(</span><span class="kt">Just</span> <span class="n">dotfResult</span><span class="p">)</span> <span class="ow">=</span> <span class="p">(</span><span class="n">state&#39;</span><span class="p">,</span> <span class="n">output</span><span class="p">)</span>
+  <span class="kr">where</span>
+    <span class="n">state&#39;</span> <span class="ow">=</span> <span class="p">(</span><span class="n">matrixRR&#39;&#39;</span><span class="p">,</span> <span class="n">succWrap</span> <span class="n">counter</span><span class="p">)</span>
+
+    <span class="p">(</span><span class="n">matrixRR&#39;&#39;</span><span class="p">,</span> <span class="n">output</span><span class="p">)</span>
+      <span class="o">|</span> <span class="n">counter</span> <span class="o">==</span> <span class="n">maxBound</span> <span class="ow">=</span> <span class="p">(</span><span class="n">emptyMatrix</span> <span class="n">nullMatrix</span><span class="p">,</span> <span class="kt">Just</span> <span class="n">matrixRR&#39;</span><span class="p">)</span>
+      <span class="o">|</span> <span class="n">otherwise</span>           <span class="ow">=</span> <span class="p">(</span><span class="n">matrixRR&#39;</span><span class="p">,</span>              <span class="kt">Nothing</span><span class="p">)</span>
+
+    <span class="c1">-- Calculate new partial result, store it in matrix R</span>
+    <span class="p">(</span><span class="kr">_</span><span class="p">,</span> <span class="n">rColI</span><span class="p">,</span> <span class="n">rRowI</span><span class="p">,</span> <span class="n">srRowI</span><span class="p">,</span> <span class="n">srColI</span><span class="p">)</span> <span class="ow">=</span> <span class="n">counter</span>
+
+    <span class="n">subR</span>      <span class="ow">=</span> <span class="p">(</span><span class="n">matrixRR</span> <span class="p">`</span><span class="n">index</span><span class="p">`</span> <span class="n">rRowI</span><span class="p">)</span> <span class="p">`</span><span class="n">index</span><span class="p">`</span> <span class="n">rColI</span>
+    <span class="n">subR&#39;</span>     <span class="ow">=</span> <span class="n">alterMatrixElement</span> <span class="n">subR</span> <span class="n">srRowI</span> <span class="n">srColI</span> <span class="p">(</span><span class="o">+</span><span class="n">dotfResult</span><span class="p">)</span>
+    <span class="n">matrixRR&#39;</span> <span class="ow">=</span> <span class="n">replaceMatrixElement</span> <span class="n">matrixRR</span> <span class="n">rRowI</span> <span class="n">rColI</span> <span class="n">subR&#39;</span>
+</code></pre></div>
+
+
+<p>All that&rsquo;s left to do is to tie the three components together in <code>mmmult2d</code>:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell">      <span class="c1">-- [1] Reader stage</span>
+      <span class="n">readerOutput</span> <span class="ow">::</span> <span class="kt">Signal</span> <span class="kt">System</span> <span class="p">(</span><span class="kt">Maybe</span> <span class="p">(</span><span class="kt">Vec</span> <span class="n">aa_sn</span> <span class="kt">Int</span><span class="p">,</span> <span class="kt">Vec</span> <span class="n">bb_sm</span> <span class="kt">Int</span><span class="p">))</span>
+      <span class="n">readerOutput</span> <span class="ow">=</span> <span class="n">register</span> <span class="kt">Nothing</span> <span class="o">$</span> <span class="n">mealy</span> <span class="n">mmmult2dreader</span> <span class="p">(</span><span class="kt">Nothing</span><span class="p">,</span> <span class="n">counter</span><span class="p">)</span> <span class="n">ab&#39;</span>
+
+      <span class="c1">-- [2] Dot product pipeline</span>
+      <span class="n">dotfOutput</span> <span class="ow">::</span> <span class="kt">Signal</span> <span class="kt">System</span> <span class="p">(</span><span class="kt">Maybe</span> <span class="kt">Int</span><span class="p">)</span>
+      <span class="n">dotfOutput</span> <span class="ow">=</span> <span class="n">register</span> <span class="kt">Nothing</span> <span class="o">$</span> <span class="n">toSignal</span> <span class="o">$</span> <span class="n">dotfm</span> <span class="o">$</span> <span class="n">fromSignal</span> <span class="n">readerOutput</span>
+
+      <span class="c1">-- [3] Writer stage</span>
+      <span class="n">writerOutput</span> <span class="ow">::</span> <span class="kt">Signal</span> <span class="kt">System</span> <span class="p">(</span><span class="kt">Maybe</span> <span class="p">(</span><span class="kt">Matrix</span> <span class="n">aa_m</span> <span class="n">bb_n</span> <span class="p">(</span><span class="kt">Matrix</span> <span class="n">aa_sm</span> <span class="n">bb_sn</span> <span class="kt">Int</span><span class="p">)))</span>
+      <span class="n">writerOutput</span> <span class="ow">=</span> <span class="n">mealy</span> <span class="n">mmmult2dwriter</span> <span class="p">(</span><span class="n">emptyMatrix</span> <span class="n">nullMatrix</span><span class="p">,</span> <span class="n">counter</span><span class="p">)</span> <span class="n">dotfOutput</span>
+</code></pre></div>
+
+
+<p>And that&rsquo;s it! In the repository you&rsquo;ll find a slightly more generalized function which can handle an number type, instead of restricting it to only <code>Int</code>s. You&rsquo;ll also find a version reading and writing its results from and to blockRAM, which you would find in a more realistic scenario.</p>
+
+<h1 id="conclusion-and-reflection">Conclusion and reflection</h1>
+
+<p>We’ve implemented a pipelined matrix multiplication algorithm, parameterizable in such a way that we can easily make a time/space trade-off. During the implementation we’ve seen a lot constructs in Clash. This second will go over some critiques.</p>
+
+<h2 id="delayed-signals-what-are-they-really">Delayed signals: what are they <em>really</em>?</h2>
+
+<p>Delayed signals are an enormously helpful tool in Clash’s toolbox, but it is unclear what the exact semantics  of a delayed signal actually are. In our design we&rsquo;ve used it in a pipelined manner, that is: we treat a delayed function f as if it were a non-stateful function but simply with a delay between its in- and output. This is not enforced by the type system in any way though (unclear if that’s even remotely possible), and we can think of at least four other meanings of “delayed”:</p>
+
+<ol>
+<li><p>A delay of <em>four</em> could mean inputs and outputs are only valid every 4nth cycle. That is, after supplying an input one should wait for a few clock for an answer. This is incidentally what we do dynamically using a Maybe type in our top-level function <code>mmult2d</code>.</p></li>
+
+<li><p>A delay of <em>four</em> could simply mean the first inputs are ignored and the very first four outputs should be ignored. This could have been used for storing partial results in our matrix multiplication algorithm: the dot product only yields valid results after some time anyway.</p></li>
+
+<li><p>A delay of <em>four</em> could mean the first four inputs are accepted, but the first four outputs should be ignored. For example, imagine a simple moving average function. Internally it maintains a buffer containing a number of elements. A new incoming element will “push” the oldest value out of its buffer. The output is the average of all values. This would potentially (depending on your goal) an invalid output for the first few averages.</p></li>
+
+<li><p>A delay of <em>four</em> could mean the first four inputs are ignored, but the outputs are already valid.</p></li>
+</ol>
+
+<p>In fact, it’s not even clear what a “delay” means for a signal on its own. I’d argue that what we actually want to express is a notion of “scheduled validness” or its converse “scheduled undefinedness”. I.e., a signal’s validness could then be defined as the pseudocode:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="kt">KnownNat</span> <span class="n">p</span> <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">k</span> <span class="ow">=&gt;</span> <span class="n">forall</span> <span class="n">n</span><span class="o">.</span> <span class="kt">Signal</span> <span class="n">dom</span> <span class="p">(</span><span class="n">n</span><span class="o">*</span><span class="n">p</span> <span class="o">+</span> <span class="n">k</span><span class="p">)</span> <span class="n">a</span>
+</code></pre></div>
+
+
+<p>Where <em>p</em> is a period, <em>k</em> is an offset and <em>n</em> is a natural number. The first valid value for this signal is the expressed by <em>k</em>, while it would also produce a valid value for <em>k+p</em>, <em>k+2p</em>, … . An actual definition of such as “scheduled signal” could look like:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="kr">data</span> <span class="kt">SSignal</span> <span class="p">(</span><span class="n">period</span> <span class="ow">::</span> <span class="kt">Nat</span><span class="p">,</span> <span class="n">offset</span> <span class="ow">::</span> <span class="kt">Nat</span><span class="p">)</span> <span class="p">(</span><span class="n">dom</span> <span class="ow">::</span> <span class="kt">Domain</span><span class="p">)</span> <span class="n">a</span> <span class="ow">=</span> <span class="o">...</span>
+</code></pre></div>
+
+
+<p>where a “normal” Signal could be expressed as:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="kr">type</span> <span class="kt">Signal</span> <span class="p">(</span><span class="n">dom</span> <span class="ow">::</span> <span class="kt">Domain</span><span class="p">)</span> <span class="n">a</span> <span class="ow">=</span> <span class="kt">SSignal</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="n">dom</span> <span class="n">a</span>
+</code></pre></div>
+
+
+<p>Various methods could be implemented to make it easy to work with and synchronize otherwise out-of-step signals:</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="c1">-- | Sync offsets by buffering</span>
+<span class="nf">syncOffset</span>
+  <span class="ow">::</span> <span class="kt">SSignal</span> <span class="n">dom</span> <span class="p">(</span><span class="n">pb</span><span class="p">,</span> <span class="n">oa</span> <span class="o">+</span> <span class="n">o</span><span class="p">)</span> <span class="n">b</span>
+  <span class="ow">-&gt;</span> <span class="kt">SSignal</span> <span class="n">dom</span> <span class="p">(</span><span class="n">pa</span><span class="p">,</span> <span class="n">oa</span><span class="p">)</span> <span class="n">a</span>
+  <span class="ow">-&gt;</span> <span class="kt">SSignal</span> <span class="n">dom</span> <span class="p">(</span><span class="n">pa</span><span class="p">,</span> <span class="n">oa</span> <span class="o">+</span> <span class="n">o</span><span class="p">)</span> <span class="n">a</span>
+<span class="nf">syncOffset</span> <span class="kr">_</span> <span class="ow">=</span> <span class="o">...</span>
+
+<span class="c1">-- | Sync periods by buffering</span>
+<span class="nf">syncPeriod</span>
+  <span class="ow">::</span> <span class="n">p</span> <span class="o">~</span> <span class="kt">LCM</span> <span class="n">pa</span> <span class="n">pb</span>
+  <span class="ow">=&gt;</span> <span class="n">p</span> <span class="o">~</span> <span class="n">npa</span> <span class="o">*</span> <span class="n">pa</span>
+  <span class="ow">=&gt;</span> <span class="n">p</span> <span class="o">~</span> <span class="n">npb</span> <span class="o">*</span> <span class="n">pb</span>
+  <span class="ow">=&gt;</span> <span class="kt">SSignal</span> <span class="n">dom</span> <span class="p">(</span><span class="n">pa</span><span class="p">,</span> <span class="n">o</span><span class="p">)</span> <span class="n">a</span>
+  <span class="ow">-&gt;</span> <span class="kt">SSignal</span> <span class="n">dom</span> <span class="p">(</span><span class="n">pb</span><span class="p">,</span> <span class="n">o</span><span class="p">)</span> <span class="n">b</span>
+  <span class="ow">-&gt;</span> <span class="kt">SSignal</span> <span class="n">dom</span> <span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">p</span><span class="o">+</span><span class="n">o</span><span class="p">)</span> <span class="p">(</span><span class="kt">Vec</span> <span class="n">npa</span> <span class="n">a</span><span class="p">,</span> <span class="kt">Vec</span> <span class="n">npb</span> <span class="n">b</span><span class="p">)</span>
+<span class="nf">syncPeriod</span> <span class="n">a</span> <span class="n">b</span> <span class="ow">=</span> <span class="o">...</span>
+
+<span class="c1">-- | Synchronize signals&#39;s periods and offsets</span>
+<span class="nf">sync</span> <span class="n">a</span> <span class="n">b</span> <span class="ow">=</span>
+  <span class="n">syncPeriod</span> <span class="p">(</span><span class="n">syncOffset</span> <span class="n">a</span> <span class="n">b</span><span class="p">)</span> <span class="n">b</span>
+</code></pre></div>
+
+
+<p>Scheduling information could even be used to automatically enabled and disable circuits, depending on how they’re combined with other slower circuits.</p>
+
+<p>All in all, Clash could do with much better integrated support for “delayed” signals. Having this concept at a type level could prove very useful indeed. Most importantly, it could give the programmer a sense of security knowing the compiler checked for synchronization mismatches. Perhaps a future blogpost could work something out..</p>
+
+<h2 id="pipelining-we-need-a-stdlib">Pipelining: we need a stdlib</h2>
+
+<p>Clash pipelining capabilities are quite powerful. In combination with delayed signals dependently typed folds are capable of providing a relatively easy way of inserting registers at the right places. While existing functions in Clash cover this, specialized functions for pipelining circuits could provide more a more comfortable way of dealing with dependently typed folds. While writing this blogpost, we developed two (see repository):</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="c1">-- | Pipelined foldl. Function itself is not pipelined, but a single register</span>
+<span class="c1">-- will be added after it.</span>
+<span class="nf">foldrp</span>
+  <span class="ow">::</span> <span class="n">forall</span> <span class="n">dom</span> <span class="n">a</span> <span class="n">b</span> <span class="n">startDelay</span> <span class="n">n</span>
+   <span class="o">.</span> <span class="n">forall</span> <span class="n">gated</span> <span class="n">synchronous</span>
+   <span class="o">.</span> <span class="kt">HiddenClockReset</span> <span class="n">dom</span> <span class="n">gated</span> <span class="n">synchronous</span>
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">n</span>
+  <span class="ow">=&gt;</span> <span class="p">(</span><span class="n">a</span> <span class="ow">-&gt;</span> <span class="n">b</span> <span class="ow">-&gt;</span> <span class="n">b</span><span class="p">)</span>
+  <span class="c1">-- ^ f</span>
+  <span class="ow">-&gt;</span> <span class="n">b</span>
+  <span class="c1">-- ^ Default output</span>
+  <span class="ow">-&gt;</span> <span class="n">a</span>
+  <span class="c1">-- ^ Default input</span>
+  <span class="ow">-&gt;</span> <span class="kt">DSignal</span> <span class="n">dom</span> <span class="n">startDelay</span> <span class="p">(</span><span class="kt">Vec</span> <span class="n">n</span> <span class="n">a</span><span class="p">)</span>
+  <span class="c1">-- ^ Vector to fold over</span>
+  <span class="ow">-&gt;</span> <span class="kt">DSignal</span> <span class="n">dom</span> <span class="n">startDelay</span> <span class="n">b</span>
+  <span class="c1">-- ^ Start value</span>
+  <span class="ow">-&gt;</span> <span class="kt">DSignal</span> <span class="n">dom</span> <span class="p">(</span><span class="n">startDelay</span> <span class="o">+</span> <span class="n">n</span><span class="p">)</span> <span class="n">b</span>
+<span class="nf">foldrp</span> <span class="ow">=</span> <span class="o">...</span>
+</code></pre></div>
+
+
+<p>and</p>
+
+<div class="highlight"><pre><code class="language-haskell" data-lang="haskell"><span class="c1">-- | Pipelined foldl. Function itself might be pipelined.</span>
+<span class="nf">foldrpp</span>
+  <span class="ow">::</span> <span class="n">forall</span> <span class="n">dom</span> <span class="n">a</span> <span class="n">b</span> <span class="n">procDelay</span> <span class="n">startDelay</span> <span class="n">n</span>
+   <span class="o">.</span> <span class="n">forall</span> <span class="n">gated</span> <span class="n">synchronous</span>
+   <span class="o">.</span> <span class="kt">HiddenClockReset</span> <span class="n">dom</span> <span class="n">gated</span> <span class="n">synchronous</span>
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">n</span>
+  <span class="ow">=&gt;</span> <span class="kt">KnownNat</span> <span class="n">procDelay</span>
+  <span class="ow">=&gt;</span> <span class="p">(</span><span class="n">forall</span> <span class="n">d</span><span class="o">.</span> <span class="kt">DSignal</span> <span class="n">dom</span> <span class="n">d</span> <span class="n">a</span> <span class="ow">-&gt;</span> <span class="kt">DSignal</span> <span class="n">dom</span> <span class="n">d</span> <span class="n">b</span> <span class="ow">-&gt;</span> <span class="kt">DSignal</span> <span class="n">dom</span> <span class="p">(</span><span class="n">d</span> <span class="o">+</span> <span class="n">procDelay</span><span class="p">)</span> <span class="n">b</span><span class="p">)</span>
+  <span class="c1">-- ^ Possibly pipelined function</span>
+  <span class="ow">-&gt;</span> <span class="n">a</span>
+  <span class="c1">-- ^ Default</span>
+  <span class="ow">-&gt;</span> <span class="kt">DSignal</span> <span class="n">dom</span> <span class="n">startDelay</span> <span class="p">(</span><span class="kt">Vec</span> <span class="n">n</span> <span class="n">a</span><span class="p">)</span>
+  <span class="c1">-- ^ Vector to fold over</span>
+  <span class="ow">-&gt;</span> <span class="kt">DSignal</span> <span class="n">dom</span> <span class="n">startDelay</span> <span class="n">b</span>
+  <span class="c1">-- ^ Start value</span>
+  <span class="ow">-&gt;</span> <span class="kt">DSignal</span> <span class="n">dom</span> <span class="p">(</span><span class="n">startDelay</span> <span class="o">+</span> <span class="p">(</span><span class="n">n</span><span class="o">*</span><span class="n">procDelay</span><span class="p">))</span> <span class="n">b</span>
+<span class="nf">foldrpp</span> <span class="n">f</span> <span class="ow">=</span> <span class="o">...</span>
+</code></pre></div>
+
+
+<p>while this helped a lot, the fact that we had to write it ourselves is less than ideal. Clash should provided constructs like these in an officially supported or its own library. In a next blogpost, we will develop a set of these functions.</p>
+
+<h1 id="faq">FAQ</h1>
+
+<h2 id="what-is-knownnat-n">What is <code>KnownNat n</code>?</h2>
+
+<p>Like <em>Num</em>, <em>KnownNat</em> is a typeclass. This class does not implement any interesting functions, but allows code to access compile-time numbers (such as the length of a vector) at runtime. If you forget to add a constraint, you might get an error looking like:</p>
+
+<pre><code>src/Main.hs:55:3: error:
+    Could not deduce (KnownNat n) arising from a use of ‘sum’
+    from the context: Num a
+      bound by the type signature for:
+                 dot :: forall a (n :: Nat). Num a =&gt; Vec n a -&gt; Vec n a -&gt; a
+      at src/Main.hs:(49,1)-(53,6)
+    Possible fix:
+      add (KnownNat n) to the context of
+        the type signature for:
+          dot :: forall a (n :: Nat). Num a =&gt; Vec n a -&gt; Vec n a -&gt; a
+   |
+55 |   sum $ zipWith (*) a b
+   |   ^^^^^^^^^^^^^^^^^^^^^
+</code></pre>
+
+<p>In this case, <code>sum</code> needs to access the number <code>n</code> at runtime, but the function <code>dot</code> didn&rsquo;t require it.</p>
+
+<h2 id="why-does-sum-only-accept-non-empty-vectors">Why does <code>sum</code> only accept non-empty vectors?</h2>
+
+<p>If you accepted the challenge to convert the non-synthesizable code to code that can be, you might have seen the following error when redefining <code>dot</code>:</p>
+
+<pre><code>src/Main.hs:55:3: error:
+    • Couldn't match type ‘1 &lt;=? n’ with ‘'True’
+        arising from a use of ‘sum’
+    • In the expression: sum $ zipWith (*) a b
+      In an equation for ‘dot’: dot a b = sum $ zipWith (*) a b
+    • Relevant bindings include
+        b :: Vec n a (bound at src/Main.hs:54:7)
+        a :: Vec n a (bound at src/Main.hs:54:5)
+        dot :: Vec n a -&gt; Vec n a -&gt; a (bound at src/Main.hs:54:1)
+   |
+55 |   sum $ zipWith (*) a b
+   |   ^^^^^^^^^^^^^^^^^^^^^
+</code></pre>
+
+<p><code>sum</code> apparently expects a vector of at least a length of 1! Or as GHC puts it: <code>Couldn't match type ‘1 &lt;=? n’ with ‘'True’</code>. This might seem strange, as the implementation on lists works just fine. This is an unfortunate historic artifact of Haskell: <code>sum</code> is defined in terms of <code>Foldable</code>, which was formed way before the relevancy of dependent types. Many functions where defined partially, meaning they will emit an error if given an empty list. Clash has the ability to enforce these lengths statically. It could therefore choose to implement these partial functions, giving up some powerful static promises. It has therefore been decided to only allow vectors with at least one element, rendering all functions on <code>Foldable</code> completely defined.</p>
+
+<p>Solutions come in roughly three forms:</p>
+
+<ol>
+<li><p>Add <code>1 &lt;= n</code> as a constraint to your function. This makes the caller responsible for providing “correct” vectors. In case of a dot product, this is not perfect though: the mathematical definition perfectly allows for empty vectors.</p></li>
+
+<li><p>Hack your way around it. In case of <code>dot</code>, this means appending a single zero to the result of <code>zipWith</code>, i.e.:  <code>sum $ 0 :&gt; zipWith (*) a b</code>. This is perfectly fine, but might incur a very small performance hit both in simulation and synthetization.</p></li>
+
+<li><p>Define your own <code>sum</code>, not based on <code>Foldable</code>.</p></li>
+</ol>
+
+<h2 id="what-does-couldn-t-match-type-ax-with-by-mean">What does <code>Couldn't match type ‘ax’ with ‘by’</code> mean?</h2>
+
+<p>If you forgot to include <code>ax ~ by</code> you might have seen an error saying Clash figured out that <code>ax</code> and <code>by</code> should be equal, but that it can’t prove it.</p>
+
+<pre><code>src/Main.hs:47:43: error:
+    • Couldn't match type ‘ax’ with ‘by’
+      ‘ax’ is a rigid type variable bound by
+        the type signature for:
+          mmult :: forall a (ay :: Nat) (ax :: Nat) (by :: Nat) (bx :: Nat).
+                   Num a =&gt;
+                   Vec ay (Vec ax a) -&gt; Vec by (Vec bx a) -&gt; Vec ay (Vec bx a)
+        at src/Main.hs:(37,1)-(44,22)
+      ‘by’ is a rigid type variable bound by
+        the type signature for:
+          mmult :: forall a (ay :: Nat) (ax :: Nat) (by :: Nat) (bx :: Nat).
+                   Num a =&gt;
+                   Vec ay (Vec ax a) -&gt; Vec by (Vec bx a) -&gt; Vec ay (Vec bx a)
+        at src/Main.hs:(37,1)-(44,22)
+      Expected type: Vec ay (Vec by a)
+        Actual type: Vec ay (Vec ax a)
+    • In the second argument of ‘map’, namely ‘a’
+      In the expression: map (\ ar -&gt; map (dot ar) (transpose b)) a
+      In an equation for ‘mmult’:
+          mmult a b = map (\ ar -&gt; map (dot ar) (transpose b)) a
+    • Relevant bindings include
+        b :: Vec by (Vec bx a) (bound at src/Main.hs:46:9)
+        a :: Vec ay (Vec ax a) (bound at src/Main.hs:46:7)
+        mmult :: Vec ay (Vec ax a)
+                 -&gt; Vec by (Vec bx a) -&gt; Vec ay (Vec bx a)
+          (bound at src/Main.hs:46:1)
+   |
+47 |   map (\ar -&gt; map (dot ar) (transpose b)) a
+   |                                           ^
+</code></pre>
+
+<p>Although not quite obvious, this constraint is requested by <code>dot</code> (in this case), which asks for its given vectors to be of equal length. Of course, this is exactly what we want! Matrix multiplications don’t make sense if <code>ax</code> differs from <code>by</code>.</p>
+
+		</div>
+		
+<div class="post__tags tags clearfix">
+	<svg class="icon icon-tag" width="16" height="16" viewBox="0 0 16 16"><path d="M16 9.5c0 .373-.24.74-.5 1l-5 5c-.275.26-.634.5-1 .5-.373 0-.74-.24-1-.5L1 8a2.853 2.853 0 0 1-.7-1C.113 6.55 0 5.973 0 5.6V1.4C0 1.034.134.669.401.401.67.134 1.034 0 1.4 0h4.2c.373 0 .95.113 1.4.3.45.187.732.432 1 .7l7.5 7.502c.26.274.5.632.5.998zM3.5 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/></svg>
+	<ul class="tags__list">
+		<li class="tags__item"><a class="tags__link btn" href="/tags/matrices/" rel="tag">Matrices</a></li>
+		<li class="tags__item"><a class="tags__link btn" href="/tags/design/" rel="tag">Design</a></li>
+	</ul>
+</div>
+	</article>
+	
+
+<div class="authorbox clearfix">
+	<figure class="authorbox__avatar">
+		<img alt="Martijn Bastiaan avatar" src="/media/authors/martijnbastiaan.png" class="avatar" height="90" width="90">
+	</figure>
+	<div class="authorbox__header">
+		<span class="authorbox__name">About Martijn Bastiaan</span>
+	</div>
+	<div class="authorbox__description">
+		Martijn Bastiaan has been a software engineer at <a href='http://qbaylogic.com/'>QBayLogic</a> since 2017. He is an active contributer to the Clash compiler itself.
+	</div>
+</div>
+
+	
+<nav class="post-nav row clearfix">
+	<div class="post-nav__item post-nav__item--next col-1-2">
+		<a class="post-nav__link" href="/blog/0002-systolic-arrays/" rel="next"><span class="post-nav__caption">Next&thinsp;»</span><p class="post-nav__post-title">Building systolic arrays with Clash</p></a>
+	</div>
+</nav>
+	
+<section class="comments">
+	<div id="disqus_thread"></div>
+<script>
+    var disqus_config = function () {
+    
+    
+    
+    };
+    (function() {
+        if (["localhost", "127.0.0.1"].indexOf(window.location.hostname) != -1) {
+            document.getElementById('disqus_thread').innerHTML = 'Disqus comments not available by default when the website is previewed locally.';
+            return;
+        }
+        var d = document, s = d.createElement('script'); s.async = true;
+        s.src = '//' + "clash-lang" + '.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', +new Date());
+        (d.head || d.body).appendChild(s);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="https://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</section>
+
+</main>
+
+
+    <style>main{ margin-right: 0!important; }</style>
+
+
+
+
+	</div>
+		<footer class="footer">
+			<div class="container container-inner">
+				<div class="footer__copyright">&copy; 2018 clash-lang.org</div>
+			</div>
+		</footer>
+	</div>
+
+<script>
+	var navigation = responsiveNav(".menu", {
+		navClass: "menu--collapse",
+	});
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=TeX-MML-AM_HTMLorMML" async></script>
+
+</body>
+</html>

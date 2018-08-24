@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Tutorial on Clash</title>
+    <link>https://clash-lang.org/categories/tutorial/</link>
+    <description>Recent content in Tutorial on Clash</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Wed, 25 Jul 2018 00:00:00 +0000</lastBuildDate>
+    
+	<atom:link href="https://clash-lang.org/categories/tutorial/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>Building systolic arrays with Clash</title>
+      <link>https://clash-lang.org/blog/0002-systolic-arrays/</link>
+      <pubDate>Wed, 25 Jul 2018 00:00:00 +0000</pubDate>
+      
+      <guid>https://clash-lang.org/blog/0002-systolic-arrays/</guid>
+      <description>Systolic arrays are networks of locally coupled processing elements, continuously receiving and sending their inputs and outputs from and to their neighbors. They cannot access main memory or global buses, thus allowing them to keep critical paths short. Because of this, they are extremely good at solving problems in the field of image processing, artificial intelligence, and computer vision. This blogpost will take a look at how to build systolic arrays with Clash and subsequently build a matrix multiplier with it.</description>
+    </item>
+    
+    <item>
+      <title>Matrix multiplication with Clash</title>
+      <link>https://clash-lang.org/blog/0001-matrix-multiplication/</link>
+      <pubDate>Mon, 09 Jul 2018 00:00:00 +0000</pubDate>
+      
+      <guid>https://clash-lang.org/blog/0001-matrix-multiplication/</guid>
+      <description>Matrix multiplications happen to be useful in a very broad range of computational applications, such as computer graphics, artificial intelligence, and climate change research. At QbayLogic we help implement these (and more) applications on FPGAs using Clash. In this blogpost we will explore the intricacies of implementing matrix multiplications on FPGAs. We will explore the apparent differences between hardware and software development, how to use Clash to convert a “naive” algorithm to one suitable for an FPGA, and the use of Clash dependent types.</description>
+    </item>
+    
+  </channel>
+</rss>

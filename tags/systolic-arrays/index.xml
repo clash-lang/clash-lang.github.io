@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Systolic Arrays on Clash</title>
+    <link>https://clash-lang.org/tags/systolic-arrays/</link>
+    <description>Recent content in Systolic Arrays on Clash</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Wed, 25 Jul 2018 00:00:00 +0000</lastBuildDate>
+    
+	<atom:link href="https://clash-lang.org/tags/systolic-arrays/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>Building systolic arrays with Clash</title>
+      <link>https://clash-lang.org/blog/0002-systolic-arrays/</link>
+      <pubDate>Wed, 25 Jul 2018 00:00:00 +0000</pubDate>
+      
+      <guid>https://clash-lang.org/blog/0002-systolic-arrays/</guid>
+      <description>Systolic arrays are networks of locally coupled processing elements, continuously receiving and sending their inputs and outputs from and to their neighbors. They cannot access main memory or global buses, thus allowing them to keep critical paths short. Because of this, they are extremely good at solving problems in the field of image processing, artificial intelligence, and computer vision. This blogpost will take a look at how to build systolic arrays with Clash and subsequently build a matrix multiplier with it.</description>
+    </item>
+    
+  </channel>
+</rss>

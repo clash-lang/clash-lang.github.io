@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Matrices on Clash</title>
+    <link>https://clash-lang.org/tags/matrices/</link>
+    <description>Recent content in Matrices on Clash</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Mon, 09 Jul 2018 00:00:00 +0000</lastBuildDate>
+    
+	<atom:link href="https://clash-lang.org/tags/matrices/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>Matrix multiplication with Clash</title>
+      <link>https://clash-lang.org/blog/0001-matrix-multiplication/</link>
+      <pubDate>Mon, 09 Jul 2018 00:00:00 +0000</pubDate>
+      
+      <guid>https://clash-lang.org/blog/0001-matrix-multiplication/</guid>
+      <description>Matrix multiplications happen to be useful in a very broad range of computational applications, such as computer graphics, artificial intelligence, and climate change research. At QbayLogic we help implement these (and more) applications on FPGAs using Clash. In this blogpost we will explore the intricacies of implementing matrix multiplications on FPGAs. We will explore the apparent differences between hardware and software development, how to use Clash to convert a “naive” algorithm to one suitable for an FPGA, and the use of Clash dependent types.</description>
+    </item>
+    
+  </channel>
+</rss>
